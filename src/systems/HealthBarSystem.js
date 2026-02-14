@@ -196,7 +196,7 @@ export class HealthBarSystem {
     ctx.clearRect(0, 0, width, height);
     
     // Calculate health percentage
-    const healthPercent = unit.health / unit.maxHealth;
+    const healthPercent = entity.health / entity.maxHealth;
     
     // Determine color based on health
     let healthColor;
