@@ -20,6 +20,7 @@
  */
 
 import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { createXRSession } from '../utils/WebXRUtils.js';
 import { UnitSystem } from '../systems/UnitSystem.js';
 
@@ -129,6 +130,9 @@ export class Game {
     
     // VR camera will be created automatically by XR session
     
+    // Add orbit controls for desktop mode
+    this.initDesktopControls();
+    
     console.log('[Game] Camera initialized');
   }
   
@@ -166,6 +170,27 @@ export class Game {
     this.sunLight = sun;
     
     console.log('[Game] Lighting initialized');
+  }
+  
+  /**
+   * Initialize desktop camera controls
+   * PATTERN: Only used in desktop mode, disabled in VR
+   */
+  initDesktopControls() {
+    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    
+    // Configure controls for RTS-style view
+    this.controls.enableDamping = true; // Smooth camera movement
+    this.controls.dampingFactor = 0.05;
+    this.controls.screenSpacePanning = false; // Pan in world space
+    this.controls.minDistance = 5; // Minimum zoom
+    this.controls.maxDistance = 100; // Maximum zoom
+    this.controls.maxPolarAngle = Math.PI / 2; // Don't go below ground
+    
+    // Set target to center of battlefield
+    this.controls.target.set(0, 0, 0);
+    
+    console.log('[Game] Desktop orbit controls initialized');
   }
   
   /**
@@ -364,6 +389,11 @@ export class Game {
       this.unitSystem.render();
     }
     
+    // Update desktop camera controls
+    if (!this.isVRMode && this.controls) {
+      this.controls.update();
+    }
+    
     // In VR mode, renderer.render is called automatically per eye
     // In desktop mode, we call it manually
     if (!this.isVRMode) {
@@ -392,6 +422,11 @@ export class Game {
       
       // Update state
       this.isVRMode = true;
+      
+      // Disable desktop controls in VR
+      if (this.controls) {
+        this.controls.enabled = false;
+      }
       
       // Handle session end
       this.xrSession.addEventListener('end', () => {
@@ -442,6 +477,12 @@ export class Game {
   onVRSessionEnd() {
     this.isVRMode = false;
     this.xrSession = null;
+    
+    // Re-enable desktop controls
+    if (this.controls) {
+      this.controls.enabled = true;
+    }
+    
     console.log('[Game] VR session ended');
   }
   
