@@ -24,6 +24,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { createXRSession } from '../utils/WebXRUtils.js';
 import { UnitSystem } from '../systems/UnitSystem.js';
 import { SelectionSystem } from '../systems/SelectionSystem.js';
+import { CombatSystem } from '../systems/CombatSystem.js';
 
 export class Game {
   /**
@@ -208,6 +209,7 @@ export class Game {
     
     // Initialize game systems
     this.unitSystem = new UnitSystem(this.scene);
+    this.combatSystem = new CombatSystem(this.scene, this.unitSystem);
     this.selectionSystem = new SelectionSystem(this.camera, this.renderer, this.unitSystem);
     this.selectionSystem.init(this.scene);
     
@@ -218,7 +220,6 @@ export class Game {
     this.setupCommandInput();
     
     // Future systems:
-    // this.combatSystem = new CombatSystem();
     // this.resourceSystem = new ResourceSystem();
     
     // Handle window resize
@@ -230,12 +231,38 @@ export class Game {
   /**
    * Spawn demo units for testing
    * PERFORMANCE TEST: Spawning 50 units with instanced rendering
+   * COMBAT TEST: Player team (0) vs Enemy team (1)
    */
   spawnDemoUnits() {
-    // Spawn 50 random units for performance testing
-    // With instanced rendering, this should still be 5 draw calls total
-    this.unitSystem.spawnRandomUnits(50);
-    console.log('[Game] Spawned 50 demo units for performance testing');
+    // Spawn 25 player units (team 0) on left side
+    for (let i = 0; i < 25; i++) {
+      const x = -40 + Math.random() * 20;
+      const z = (Math.random() - 0.5) * 60;
+      const types = ['scout', 'soldier', 'tank', 'artillery'];
+      const type = types[Math.floor(Math.random() * types.length)];
+      const unit = this.unitSystem.spawnUnit(type, x, z, 0);
+      
+      // Enable auto-attack for player units too
+      if (unit) {
+        unit.autoAttack = true;
+      }
+    }
+    
+    // Spawn 25 enemy units (team 1) on right side
+    for (let i = 0; i < 25; i++) {
+      const x = 40 + Math.random() * 20;
+      const z = (Math.random() - 0.5) * 60;
+      const types = ['scout', 'soldier', 'tank', 'artillery'];
+      const type = types[Math.floor(Math.random() * types.length)];
+      const unit = this.unitSystem.spawnUnit(type, x, z, 1);
+      
+      // Enable auto-attack for enemy units
+      if (unit) {
+        unit.autoAttack = true;
+      }
+    }
+    
+    console.log('[Game] Spawned 25 player units (team 0) and 25 enemy units (team 1) - COMBAT ENABLED');
   }
   
   /**
@@ -454,12 +481,15 @@ export class Game {
       this.unitSystem.update(dt);
     }
     
+    if (this.combatSystem) {
+      this.combatSystem.update(dt);
+    }
+    
     if (this.selectionSystem) {
       this.selectionSystem.update();
     }
     
     // Future: More systems
-    // this.combatSystem.update(dt);
     // this.resourceSystem.update(dt);
   }
   
@@ -472,6 +502,10 @@ export class Game {
     // Update visual representations (instance matrices)
     if (this.unitSystem) {
       this.unitSystem.render();
+    }
+    
+    if (this.combatSystem) {
+      this.combatSystem.render();
     }
     
     // Update desktop camera controls
