@@ -271,11 +271,14 @@ export class UnitSystem {
   
   /**
    * Update visual representation (called at render rate)
-   * CRITICAL: This updates GPU instance matrices
+   * CRITICAL: This updates GPU instance matrices and colors
    * 
    * PERFORMANCE: One update per unit type, not per unit
    */
   render() {
+    // Temp color for team tinting
+    const tempColor = new THREE.Color();
+    
     // Update each unit type's instanced mesh
     Object.entries(this.unitsByType).forEach(([type, units]) => {
       const mesh = this.instancedMeshes[type];
@@ -283,7 +286,7 @@ export class UnitSystem {
       // Update instance count (only render active units)
       mesh.count = units.length;
       
-      // Update each instance's transform matrix
+      // Update each instance's transform matrix and color
       units.forEach((unit, index) => {
         // Set position
         this.tempPosition.copy(unit.position);
@@ -304,12 +307,22 @@ export class UnitSystem {
         // Update instance matrix
         mesh.setMatrixAt(index, this.tempMatrix);
         
-        // TODO: Set color per instance (for selection, team colors)
-        // mesh.setColorAt(index, color);
+        // Set color based on team (team 0 = bright, team 1 = darker)
+        tempColor.set(this.unitColors[type]);
+        if (unit.team === 1) {
+          // Make enemy units darker
+          tempColor.multiplyScalar(0.6);
+        }
+        mesh.setColorAt(index, tempColor);
       });
       
       // Tell GPU to update
       mesh.instanceMatrix.needsUpdate = true;
+      
+      // Update colors if mesh supports it
+      if (mesh.instanceColor) {
+        mesh.instanceColor.needsUpdate = true;
+      }
     });
   }
   

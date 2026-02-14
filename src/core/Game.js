@@ -25,6 +25,7 @@ import { createXRSession } from '../utils/WebXRUtils.js';
 import { UnitSystem } from '../systems/UnitSystem.js';
 import { SelectionSystem } from '../systems/SelectionSystem.js';
 import { CombatSystem } from '../systems/CombatSystem.js';
+import { HealthBarSystem } from '../systems/HealthBarSystem.js';
 
 export class Game {
   /**
@@ -212,12 +213,16 @@ export class Game {
     this.combatSystem = new CombatSystem(this.scene, this.unitSystem);
     this.selectionSystem = new SelectionSystem(this.camera, this.renderer, this.unitSystem);
     this.selectionSystem.init(this.scene);
+    this.healthBarSystem = new HealthBarSystem(this.scene, this.camera);
     
     // Spawn some demo units for testing
     this.spawnDemoUnits();
     
     // Setup right-click commanding
     this.setupCommandInput();
+    
+    // Setup keyboard shortcuts
+    this.setupKeyboardShortcuts();
     
     // Future systems:
     // this.resourceSystem = new ResourceSystem();
@@ -300,6 +305,22 @@ export class Game {
     });
     
     console.log('[Game] Command input setup (right-click to move)');
+  }
+  
+  /**
+   * Setup keyboard shortcuts
+   */
+  setupKeyboardShortcuts() {
+    window.addEventListener('keydown', (event) => {
+      // H key: Toggle health bars
+      if (event.key === 'h' || event.key === 'H') {
+        if (this.healthBarSystem) {
+          this.healthBarSystem.toggleShowAll();
+        }
+      }
+    });
+    
+    console.log('[Game] Keyboard shortcuts: H = toggle health bars');
   }
   
   /**
@@ -487,6 +508,10 @@ export class Game {
     
     if (this.selectionSystem) {
       this.selectionSystem.update();
+    }
+    
+    if (this.healthBarSystem) {
+      this.healthBarSystem.update(dt, this.unitSystem.allUnits);
     }
     
     // Future: More systems
