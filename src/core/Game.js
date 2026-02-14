@@ -414,9 +414,39 @@ export class Game {
           console.log('[Game] Rally point mode not yet implemented');
         }
       }
+      
+      // Tab: Cycle through player buildings
+      if (event.key === 'Tab') {
+        event.preventDefault(); // Prevent default tab behavior
+        this.cycleSelectedBuilding();
+      }
     });
     
-    console.log('[Game] Keyboard shortcuts: H = health bars, B = building mode, Q/W/E = buildings, 1-5 = produce units');
+    console.log('[Game] Keyboard shortcuts: H = health bars, B = building mode, Q/W/E = buildings, 1-5 = produce units, Tab = cycle buildings');
+  }
+  
+  /**
+   * Cycle through player buildings
+   */
+  cycleSelectedBuilding() {
+    const playerBuildings = this.buildingSystem.allBuildings.filter(b => b.team === 0 && b.isAlive);
+    
+    if (playerBuildings.length === 0) {
+      console.log('[Game] No player buildings to select');
+      return;
+    }
+    
+    // Find current selected building index
+    let currentIndex = -1;
+    if (this.selectedBuilding) {
+      currentIndex = playerBuildings.indexOf(this.selectedBuilding);
+    }
+    
+    // Select next building (wrap around)
+    const nextIndex = (currentIndex + 1) % playerBuildings.length;
+    this.selectBuildingEntity(playerBuildings[nextIndex]);
+    
+    console.log(`[Game] Cycled to building ${nextIndex + 1}/${playerBuildings.length}`);
   }
   
   /**
@@ -994,7 +1024,7 @@ export class Game {
     }
     
     if (this.healthBarSystem) {
-      this.healthBarSystem.update(dt, this.unitSystem.allUnits);
+      this.healthBarSystem.update(dt, this.unitSystem.allUnits, this.buildingSystem.allBuildings);
     }
     
     // Update UI (throttled)

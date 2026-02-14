@@ -48,6 +48,9 @@ export class BuildingSystem {
     // Instanced meshes for each building type
     this.instancedMeshes = {};
     
+    // Selection indicators
+    this.selectionIndicators = new Map(); // building -> indicator mesh
+    
     // Temp matrix for transforms
     this.tempMatrix = new THREE.Matrix4();
     this.tempPosition = new THREE.Vector3();
@@ -244,20 +247,22 @@ export class BuildingSystem {
   completeProduction(building) {
     const unitType = building.currentProduction;
     
-    // Spawn unit at rally point
-    const spawnPos = building.hasRallyPoint ? 
-      building.rallyPoint : 
-      new THREE.Vector3(building.position.x + 3, 0.5, building.position.z);
-    
+    // Spawn unit at building location, not rally point
     const unit = this.unitSystem.spawnUnit(
       unitType,
-      spawnPos.x,
-      spawnPos.z,
+      building.position.x,
+      building.position.z,
       building.team
     );
     
     if (unit) {
       console.log(`[BuildingSystem] ${building.type} produced ${unitType}`);
+      
+      // Command unit to move to rally point
+      if (building.hasRallyPoint) {
+        unit.moveTo(building.rallyPoint.x, building.rallyPoint.z);
+        console.log(`[BuildingSystem] Unit moving to rally point (${building.rallyPoint.x.toFixed(1)}, ${building.rallyPoint.z.toFixed(1)})`);
+      }
     }
     
     // Reset production
@@ -337,6 +342,10 @@ export class BuildingSystem {
         if (building.state === BuildingState.CONSTRUCTING) {
           tempColor.lerp(new THREE.Color(0x888888), 1 - building.constructionProgress);
         }
+        // Highlight if selected
+        if (building.isSelected) {
+          tempColor.lerp(new THREE.Color(0xffff00), 0.3);
+        }
         mesh.setColorAt(index, tempColor);
       });
       
@@ -346,6 +355,80 @@ export class BuildingSystem {
         mesh.instanceColor.needsUpdate = true;
       }
     });
+    
+    // Update selection indicators
+    this.updateSelectionIndicators();
+  }
+  
+  /**
+   * Update selection indicators for buildings
+   */
+  updateSelectionIndicators() {
+    // Remove indicators for deselected buildings
+    for (const [building, indicator] of this.selectionIndicators) {
+      if (!building.isSelected || !building.isAlive) {
+        this.scene.remove(indicator);
+        indicator.geometry.dispose();
+        indicator.material.dispose();
+        this.selectionIndicators.delete(building);
+      }
+    }
+    
+    // Add indicators for newly selected buildings
+    this.allBuildings.forEach(building => {
+      if (building.isSelected && building.isAlive && !this.selectionIndicators.has(building)) {
+        this.createSelectionIndicator(building);
+      }
+    });
+    
+    // Update positions and pulse animation
+    for (const [building, indicator] of this.selectionIndicators) {
+      indicator.position.copy(building.position);
+      indicator.position.y = 0.1;
+      
+      // Pulse animation
+      const time = Date.now() / 1000;
+      const scale = 1.0 + Math.sin(time * 3) * 0.1;
+      indicator.scale.set(scale, scale, scale);
+    }
+  }
+  
+  /**
+   * Create selection indicator for building
+   */
+  createSelectionIndicator(building) {
+    // Size based on building type
+    let size = 4;
+    switch(building.type) {
+      case BuildingType.COMMAND_CENTER:
+        size = 7;
+        break;
+      case BuildingType.BARRACKS:
+        size = 5;
+        break;
+      case BuildingType.FACTORY:
+        size = 6;
+        break;
+      case BuildingType.SHIELD_GENERATOR:
+        size = 3;
+        break;
+    }
+    
+    const geometry = new THREE.RingGeometry(size, size + 0.5, 32);
+    const material = new THREE.MeshBasicMaterial({
+      color: 0x00ff00,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.6
+    });
+    
+    const indicator = new THREE.Mesh(geometry, material);
+    indicator.rotation.x = -Math.PI / 2;
+    indicator.position.copy(building.position);
+    indicator.position.y = 0.1;
+    
+    this.scene.add(indicator);
+    this.selectionIndicators.set(building, indicator);
   }
   
   /**

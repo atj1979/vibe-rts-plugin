@@ -50,72 +50,76 @@ export class HealthBarSystem {
    * Update health bars (called each frame)
    * @param {number} dt - Delta time
    * @param {Array<Unit>} units - All active units
+   * @param {Array<Building>} buildings - All active buildings (optional)
    */
-  update(dt, units) {
+  update(dt, units, buildings = []) {
     this.timeSinceUpdate += dt;
     
     // Throttle updates for performance
     if (this.timeSinceUpdate < this.updateInterval) return;
     this.timeSinceUpdate = 0;
     
-    // Track which units are alive
-    const aliveUnitIds = new Set();
+    // Combine units and buildings into entities
+    const entities = [...units, ...buildings];
     
-    // Update/create health bars for all units
-    units.forEach(unit => {
-      if (!unit.isAlive) return;
+    // Track which entities are alive
+    const aliveEntityIds = new Set();
+    
+    // Update/create health bars for all entities
+    entities.forEach(entity => {
+      if (!entity.isAlive) return;
       
-      aliveUnitIds.add(unit.id);
+      aliveEntityIds.add(entity.id);
       
       // Check if we should show this health bar
-      const shouldShow = this.shouldShowHealthBar(unit);
+      const shouldShow = this.shouldShowHealthBar(entity);
       
       if (shouldShow) {
-        if (!this.healthBars.has(unit.id)) {
-          this.createHealthBar(unit);
+        if (!this.healthBars.has(entity.id)) {
+          this.createHealthBar(entity);
         } else {
-          this.updateHealthBar(unit);
+          this.updateHealthBar(entity);
         }
       } else {
         // Hide if exists
-        if (this.healthBars.has(unit.id)) {
-          const sprite = this.healthBars.get(unit.id);
+        if (this.healthBars.has(entity.id)) {
+          const sprite = this.healthBars.get(entity.id);
           sprite.visible = false;
         }
       }
     });
     
-    // Remove health bars for dead units
-    this.healthBars.forEach((sprite, unitId) => {
-      if (!aliveUnitIds.has(unitId)) {
-        this.removeHealthBar(unitId);
+    // Remove health bars for dead entities
+    this.healthBars.forEach((sprite, entityId) => {
+      if (!aliveEntityIds.has(entityId)) {
+        this.removeHealthBar(entityId);
       }
     });
   }
   
   /**
    * Determine if health bar should be shown
-   * @param {Unit} unit
+   * @param {Unit|Building} entity
    * @returns {boolean}
    */
-  shouldShowHealthBar(unit) {
+  shouldShowHealthBar(entity) {
     // Always show if setting enabled
     if (this.showAllHealthBars) return true;
     
     // Show if selected
-    if (unit.isSelected) return true;
+    if (entity.isSelected) return true;
     
     // Show if damaged
-    if (unit.health < unit.maxHealth) return true;
+    if (entity.health < entity.maxHealth) return true;
     
     return false;
   }
   
   /**
-   * Create health bar for unit
-   * @param {Unit} unit
+   * Create health bar for entity (unit or building)
+   * @param {Unit|Building} entity
    */
-  createHealthBar(unit) {
+  createHealthBar(entity) {
     // Create canvas for health bar
     const canvas = document.createElement('canvas');
     canvas.width = 128;
@@ -137,34 +141,34 @@ export class HealthBarSystem {
     const sprite = new THREE.Sprite(material);
     sprite.scale.set(this.healthBarWidth, this.healthBarThickness, 1);
     
-    // Position above unit
-    sprite.position.copy(unit.position);
+    // Position above entity
+    sprite.position.copy(entity.position);
     sprite.position.y = this.healthBarHeight;
     
     // Store reference
-    sprite.userData.unit = unit;
+    sprite.userData.entity = entity;
     sprite.userData.canvas = canvas;
     
     // Add to scene
     this.scene.add(sprite);
     
     // Store in map
-    this.healthBars.set(unit.id, sprite);
+    this.healthBars.set(entity.id, sprite);
     
     // Draw initial health bar
-    this.drawHealthBar(canvas, unit);
+    this.drawHealthBar(canvas, entity);
   }
   
   /**
    * Update existing health bar
-   * @param {Unit} unit
+   * @param {Unit|Building} entity
    */
-  updateHealthBar(unit) {
-    const sprite = this.healthBars.get(unit.id);
+  updateHealthBar(entity) {
+    const sprite = this.healthBars.get(entity.id);
     if (!sprite) return;
     
     // Update position
-    sprite.position.copy(unit.position);
+    sprite.position.copy(entity.position);
     sprite.position.y = this.healthBarHeight;
     
     // Make visible
@@ -172,7 +176,7 @@ export class HealthBarSystem {
     
     // Redraw if health changed
     const canvas = sprite.userData.canvas;
-    this.drawHealthBar(canvas, unit);
+    this.drawHealthBar(canvas, entity);
     
     // Update texture
     sprite.material.map.needsUpdate = true;
@@ -181,9 +185,9 @@ export class HealthBarSystem {
   /**
    * Draw health bar on canvas
    * @param {HTMLCanvasElement} canvas
-   * @param {Unit} unit
+   * @param {Unit|Building} entity
    */
-  drawHealthBar(canvas, unit) {
+  drawHealthBar(canvas, entity) {
     const ctx = canvas.getContext('2d');
     const width = canvas.width;
     const height = canvas.height;
