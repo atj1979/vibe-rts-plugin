@@ -1,0 +1,30 @@
+{
+  "name": "something-vibe",
+  "version": "0.1.0",
+  "description": "A high-performance web-based VR RTS game built with Three.js and WebXR",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint src --ext .js",
+    "format": "prettier --write \"src/**/*.js\""
+  },
+  "keywords": [
+    "webxr",
+    "vr",
+    "threejs",
+    "rts",
+    "game"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "three": "^0.163.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-basic-ssl": "^1.0.2",
+    "vite": "^5.1.4",
+    "vite-plugin-compression": "^0.5.1"
+  }
+}
