@@ -43,11 +43,7 @@ async function init() {
     // Check if WebXR is supported
     const xrSupport = await checkWebXRSupport();
     
-    if (!xrSupport.supported) {
-      handleWebXRNotSupported(xrSupport.reason);
-      return;
-    }
-    
+    // Initialize desktop mode regardless of VR support
     updateStatus('Initializing game engine...');
     
     // Initialize performance monitoring
@@ -61,10 +57,16 @@ async function init() {
     
     updateStatus('Ready!');
     
-    // Enable VR button
-    vrButton.disabled = false;
-    vrButton.textContent = 'Enter VR';
-    vrButton.onclick = () => startVRSession();
+    // Setup VR button based on support
+    if (xrSupport.supported) {
+      vrButton.disabled = false;
+      vrButton.textContent = 'Enter VR';
+      vrButton.onclick = () => startVRSession();
+    } else {
+      vrButton.disabled = true;
+      vrButton.textContent = 'VR Not Available';
+      vrButton.title = xrSupport.reason || 'WebXR not supported on this device';
+    }
     
     // Hide loading screen
     setTimeout(() => {
@@ -73,6 +75,10 @@ async function init() {
     
     // Start the game loop (renders to desktop view)
     game.start();
+    
+    console.log('[Main] Game started successfully');
+    console.log('[Main] Camera position:', game.camera.position);
+    console.log('[Main] Scene children count:', game.scene.children.length);
     
     // Update UI with performance stats
     startPerformanceUI();

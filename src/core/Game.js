@@ -249,10 +249,12 @@ export class Game {
     ground.receiveShadow = true;
     
     this.scene.add(ground);
+    console.log('[Game] Ground plane added to scene');
     
     // Add grid helper for spatial reference
     const gridHelper = new THREE.GridHelper(100, 50, 0x444466, 0x333344);
     this.scene.add(gridHelper);
+    console.log('[Game] Grid helper added to scene');
     
     this.groundPlane = ground;
   }
@@ -275,6 +277,7 @@ export class Game {
     this.demoCube.receiveShadow = true;
     
     this.scene.add(this.demoCube);
+    console.log('[Game] Demo cube added at position:', this.demoCube.position);
   }
   
   /**
@@ -398,6 +401,14 @@ export class Game {
     // In desktop mode, we call it manually
     if (!this.isVRMode) {
       this.renderer.render(this.scene, this.camera);
+    }
+    
+    // Debug: Log first render
+    if (!this._hasRendered) {
+      this._hasRendered = true;
+      console.log('[Game] First render complete');
+      console.log('[Game] Camera:', this.camera.position, 'looking at:', this.controls?.target);
+      console.log('[Game] Scene has', this.scene.children.length, 'children');
     }
     
     // Future: Interpolate object positions for smooth rendering
