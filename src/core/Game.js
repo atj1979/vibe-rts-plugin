@@ -49,6 +49,13 @@ export class Game {
     this.buildingGhost = null;
     this.buildingGhostValid = false;
     
+    // Selected building for production
+    this.selectedBuilding = null;
+    
+    // UI update throttling
+    this.uiUpdateTimer = 0;
+    this.uiUpdateInterval = 0.1; // Update UI 10 times per second
+    
     // Timing for fixed timestep
     this.fixedTimeStep = 1000 / 60; // 60 Hz for game logic
     this.maxFrameTime = 250; // Cap delta to prevent spiral of death
@@ -319,9 +326,6 @@ export class Game {
       // Ignore if in building mode
       if (this.buildingMode) return;
       
-      // Only if units are selected
-      if (!this.selectionSystem.hasSelection()) return;
-      
       // Calculate world position from mouse
       const rect = this.renderer.domElement.getBoundingClientRect();
       const mouse = new THREE.Vector2();
@@ -338,15 +342,25 @@ export class Game {
       raycaster.ray.intersectPlane(plane, target);
       
       if (target) {
-        // Command units to move
-        this.selectionSystem.commandMove(target.x, target.z);
-        
-        // Visual feedback (temporary marker)
-        this.showMoveMarker(target);
+        // Check if building is selected - set rally point
+        if (this.selectedBuilding) {
+          this.selectedBuilding.setRallyPoint(target.x, target.z);
+          console.log(`[Game] Rally point set to (${target.x.toFixed(1)}, ${target.z.toFixed(1)})`);
+          
+          // Visual feedback for rally point
+          this.showRallyPointMarker(target);
+        }
+        // Otherwise command units to move
+        else if (this.selectionSystem.hasSelection()) {
+          this.selectionSystem.commandMove(target.x, target.z);
+          
+          // Visual feedback (temporary marker)
+          this.showMoveMarker(target);
+        }
       }
     });
     
-    console.log('[Game] Command input setup (right-click to move)');
+    console.log('[Game] Command input setup (right-click to move/rally)');
   }
   
   /**
@@ -387,9 +401,52 @@ export class Game {
       if (event.key === 'e' || event.key === 'E') {
         this.selectBuilding('shield_generator');
       }
+      
+      // Production hotkeys (when building is selected)
+      if (this.selectedBuilding && !this.buildingMode) {
+        // 1-5 keys for unit production
+        if (event.key >= '1' && event.key <= '5') {
+          this.queueUnitProduction(event.key);
+        }
+        
+        // R key: Set rally point mode
+        if (event.key === 'r' || event.key === 'R') {
+          console.log('[Game] Rally point mode not yet implemented');
+        }
+      }
     });
     
-    console.log('[Game] Keyboard shortcuts: H = health bars, B = building mode, Q/W/E = buildings');
+    console.log('[Game] Keyboard shortcuts: H = health bars, B = building mode, Q/W/E = buildings, 1-5 = produce units');
+  }
+  
+  /**
+   * Queue unit production from selected building
+   * @param {string} key - Number key pressed (1-5)
+   */
+  queueUnitProduction(key) {
+    if (!this.selectedBuilding || !this.selectedBuilding.isConstructed()) {
+      console.log('[Game] Building not ready for production');
+      return;
+    }
+    
+    // Map keys to unit types based on building
+    let unitType = null;
+    const producible = this.selectedBuilding.producibleUnits;
+    
+    const keyNum = parseInt(key);
+    if (keyNum > 0 && keyNum <= producible.length) {
+      unitType = producible[keyNum - 1];
+    }
+    
+    if (unitType) {
+      const success = this.selectedBuilding.queueProduction(unitType);
+      if (success) {
+        console.log(`[Game] Queued ${unitType} for production`);
+        this.updateProductionUI();
+      } else {
+        console.log(`[Game] Cannot queue ${unitType}`);
+      }
+    }
   }
   
   /**
@@ -530,6 +587,9 @@ export class Game {
           // Exit building mode
           this.toggleBuildingMode();
         }
+      } else if (!this.buildingMode) {
+        // Try to select a building
+        this.trySelectBuilding(event);
       }
     });
     
@@ -576,6 +636,139 @@ export class Game {
   }
   
   /**
+   * Try to select a building
+   */
+  trySelectBuilding(event) {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const mouse = new THREE.Vector2();
+    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(mouse, this.camera);
+    
+    // Check for building intersections
+    const buildingMeshes = Object.values(this.buildingSystem.instancedMeshes);
+    const intersects = raycaster.intersectObjects(buildingMeshes, false);
+    
+    if (intersects.length > 0) {
+      const intersection = intersects[0];
+      const instanceId = intersection.instanceId;
+      const mesh = intersection.object;
+      
+      // Find which building type this mesh represents
+      let buildingType = null;
+      for (const [type, typeMesh] of Object.entries(this.buildingSystem.instancedMeshes)) {
+        if (typeMesh === mesh) {
+          buildingType = type;
+          break;
+        }
+      }
+      
+      if (buildingType !== null) {
+        // Get the actual building from the array
+        const buildings = this.buildingSystem.buildingsByType[buildingType];
+        const building = buildings[instanceId];
+        
+        if (building && building.team === 0) { // Only select player buildings
+          this.selectBuildingEntity(building);
+        }
+      }
+    } else {
+      // Clicked empty space - deselect building
+      this.deselectBuildingEntity();
+    }
+  }
+  
+  /**
+   * Select a building entity
+   */
+  selectBuildingEntity(building) {
+    // Deselect previous building
+    if (this.selectedBuilding) {
+      this.selectedBuilding.isSelected = false;
+    }
+    
+    this.selectedBuilding = building;
+    building.isSelected = true;
+    
+    console.log(`[Game] Selected ${building.type} (HP: ${building.health}/${building.maxHealth})`);
+    
+    // Update production UI
+    this.updateProductionUI();
+  }
+  
+  /**
+   * Deselect building entity
+   */
+  deselectBuildingEntity() {
+    if (this.selectedBuilding) {
+      this.selectedBuilding.isSelected = false;
+      this.selectedBuilding = null;
+    }
+    
+    // Hide production UI
+    this.updateProductionUI();
+  }
+  
+  /**
+   * Update production UI to show selected building's queue
+   */
+  updateProductionUI() {
+    if (typeof document === 'undefined') return;
+    
+    const panel = document.getElementById('production-panel');
+    const queueDiv = document.getElementById('production-queue');
+    
+    if (!panel || !queueDiv) return;
+    
+    if (this.selectedBuilding && this.selectedBuilding.isAlive) {
+      panel.classList.add('active');
+      
+      // Update building info
+      let html = `<div style="margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.2);">`;
+      html += `<strong>${this.selectedBuilding.type.toUpperCase()}</strong><br>`;
+      html += `<span style="font-size: 11px; opacity: 0.7;">HP: ${Math.floor(this.selectedBuilding.health)}/${this.selectedBuilding.maxHealth}</span>`;
+      html += `</div>`;
+      
+      // Show producible units
+      if (this.selectedBuilding.canProduce && this.selectedBuilding.isConstructed()) {
+        html += `<div style="margin-bottom: 8px; font-size: 12px;">`;
+        html += `<strong>Available Units:</strong><br>`;
+        this.selectedBuilding.producibleUnits.forEach((unitType, index) => {
+          html += `[${index + 1}] ${unitType}<br>`;
+        });
+        html += `</div>`;
+      }
+      
+      // Show current production
+      if (this.selectedBuilding.currentProduction) {
+        html += `<div class="production-item">`;
+        html += `<strong>Producing:</strong> ${this.selectedBuilding.currentProduction}<br>`;
+        html += `<div class="progress-bar">`;
+        html += `<div class="progress-fill" style="width: ${this.selectedBuilding.productionProgress * 100}%"></div>`;
+        html += `</div>`;
+        html += `</div>`;
+      }
+      
+      // Show queue
+      if (this.selectedBuilding.productionQueue.length > 0) {
+        html += `<div style="margin-top: 8px; font-size: 12px; opacity: 0.8;">`;
+        html += `<strong>Queue (${this.selectedBuilding.productionQueue.length}):</strong><br>`;
+        this.selectedBuilding.productionQueue.forEach((unitType, index) => {
+          html += `${index + 1}. ${unitType}<br>`;
+        });
+        html += `</div>`;
+      }
+      
+      queueDiv.innerHTML = html;
+    } else {
+      panel.classList.remove('active');
+      queueDiv.innerHTML = '<p style="opacity: 0.6; font-size: 12px;">No buildings selected</p>';
+    }
+  }
+  
+  /**
    * Show temporary move marker
    */
   showMoveMarker(position) {
@@ -602,6 +795,40 @@ export class Game {
       marker.material.opacity = 0.8 - elapsed;
       
       if (elapsed >= 0.8) {
+        clearInterval(fadeInterval);
+        this.scene.remove(marker);
+        marker.geometry.dispose();
+        marker.material.dispose();
+      }
+    }, 16);
+  }
+  
+  /**
+   * Show rally point marker
+   */
+  showRallyPointMarker(position) {
+    // Create a flag-like marker for rally points
+    const geometry = new THREE.ConeGeometry(0.3, 1.2, 8);
+    const material = new THREE.MeshBasicMaterial({
+      color: 0x00ff00,
+      transparent: true,
+      opacity: 0.9
+    });
+    
+    const marker = new THREE.Mesh(geometry, material);
+    marker.position.copy(position);
+    marker.position.y = 0.6; // Half the height above ground
+    
+    this.scene.add(marker);
+    
+    // Fade out and remove after a while
+    const startTime = Date.now();
+    const fadeInterval = setInterval(() => {
+      const elapsed = (Date.now() - startTime) / 1000;
+      marker.material.opacity = 0.9 - elapsed * 0.5;
+      marker.position.y = 0.6 + elapsed * 0.5; // Rise up while fading
+      
+      if (elapsed >= 1.8) {
         clearInterval(fadeInterval);
         this.scene.remove(marker);
         marker.geometry.dispose();
@@ -768,6 +995,15 @@ export class Game {
     
     if (this.healthBarSystem) {
       this.healthBarSystem.update(dt, this.unitSystem.allUnits);
+    }
+    
+    // Update UI (throttled)
+    this.uiUpdateTimer += dt;
+    if (this.uiUpdateTimer >= this.uiUpdateInterval) {
+      this.uiUpdateTimer = 0;
+      if (this.selectedBuilding) {
+        this.updateProductionUI();
+      }
     }
     
     // Future: More systems
