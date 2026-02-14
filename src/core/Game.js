@@ -23,6 +23,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { createXRSession } from '../utils/WebXRUtils.js';
 import { UnitSystem } from '../systems/UnitSystem.js';
+import { SelectionSystem } from '../systems/SelectionSystem.js';
 
 export class Game {
   /**
@@ -207,9 +208,14 @@ export class Game {
     
     // Initialize game systems
     this.unitSystem = new UnitSystem(this.scene);
+    this.selectionSystem = new SelectionSystem(this.camera, this.renderer, this.unitSystem);
+    this.selectionSystem.init(this.scene);
     
     // Spawn some demo units for testing
     this.spawnDemoUnits();
+    
+    // Setup right-click commanding
+    this.setupCommandInput();
     
     // Future systems:
     // this.combatSystem = new CombatSystem();
@@ -230,6 +236,78 @@ export class Game {
     // With instanced rendering, this should still be 5 draw calls total
     this.unitSystem.spawnRandomUnits(50);
     console.log('[Game] Spawned 50 demo units for performance testing');
+  }
+  
+  /**
+   * Setup command input (right-click to move)
+   */
+  setupCommandInput() {
+    this.renderer.domElement.addEventListener('contextmenu', (event) => {
+      event.preventDefault(); // Prevent context menu
+      
+      // Only if units are selected
+      if (!this.selectionSystem.hasSelection()) return;
+      
+      // Calculate world position from mouse
+      const rect = this.renderer.domElement.getBoundingClientRect();
+      const mouse = new THREE.Vector2();
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      
+      // Raycast to ground plane
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera(mouse, this.camera);
+      
+      // Intersect with ground plane at y=0
+      const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+      const target = new THREE.Vector3();
+      raycaster.ray.intersectPlane(plane, target);
+      
+      if (target) {
+        // Command units to move
+        this.selectionSystem.commandMove(target.x, target.z);
+        
+        // Visual feedback (temporary marker)
+        this.showMoveMarker(target);
+      }
+    });
+    
+    console.log('[Game] Command input setup (right-click to move)');
+  }
+  
+  /**
+   * Show temporary move marker
+   */
+  showMoveMarker(position) {
+    // Create a temporary ring at target position
+    const geometry = new THREE.RingGeometry(0.5, 0.7, 16);
+    const material = new THREE.MeshBasicMaterial({
+      color: 0xffff00,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.8
+    });
+    
+    const marker = new THREE.Mesh(geometry, material);
+    marker.rotation.x = -Math.PI / 2;
+    marker.position.copy(position);
+    marker.position.y = 0.05;
+    
+    this.scene.add(marker);
+    
+    // Fade out and remove
+    const startTime = Date.now();
+    const fadeInterval = setInterval(() => {
+      const elapsed = (Date.now() - startTime) / 1000;
+      marker.material.opacity = 0.8 - elapsed;
+      
+      if (elapsed >= 0.8) {
+        clearInterval(fadeInterval);
+        this.scene.remove(marker);
+        marker.geometry.dispose();
+        marker.material.dispose();
+      }
+    }, 16);
   }
   
   /**
@@ -374,6 +452,10 @@ export class Game {
     // Update game systems
     if (this.unitSystem) {
       this.unitSystem.update(dt);
+    }
+    
+    if (this.selectionSystem) {
+      this.selectionSystem.update();
     }
     
     // Future: More systems
