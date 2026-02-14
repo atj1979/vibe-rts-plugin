@@ -26,6 +26,7 @@ import { UnitSystem } from '../systems/UnitSystem.js';
 import { SelectionSystem } from '../systems/SelectionSystem.js';
 import { CombatSystem } from '../systems/CombatSystem.js';
 import { HealthBarSystem } from '../systems/HealthBarSystem.js';
+import { BuildingSystem } from '../systems/BuildingSystem.js';
 
 export class Game {
   /**
@@ -41,6 +42,12 @@ export class Game {
     this.isRunning = false;
     this.isPaused = false;
     this.isVRMode = false;
+    
+    // Building mode state
+    this.buildingMode = false;
+    this.selectedBuildingType = null;
+    this.buildingGhost = null;
+    this.buildingGhostValid = false;
     
     // Timing for fixed timestep
     this.fixedTimeStep = 1000 / 60; // 60 Hz for game logic
@@ -210,10 +217,14 @@ export class Game {
     
     // Initialize game systems
     this.unitSystem = new UnitSystem(this.scene);
+    this.buildingSystem = new BuildingSystem(this.scene, this.unitSystem);
     this.combatSystem = new CombatSystem(this.scene, this.unitSystem);
     this.selectionSystem = new SelectionSystem(this.camera, this.renderer, this.unitSystem);
     this.selectionSystem.init(this.scene);
     this.healthBarSystem = new HealthBarSystem(this.scene, this.camera);
+    
+    // Spawn starting bases
+    this.spawnStartingBases();
     
     // Spawn some demo units for testing
     this.spawnDemoUnits();
@@ -224,6 +235,9 @@ export class Game {
     // Setup keyboard shortcuts
     this.setupKeyboardShortcuts();
     
+    // Setup building placement
+    this.setupBuildingPlacement();
+    
     // Future systems:
     // this.resourceSystem = new ResourceSystem();
     
@@ -231,6 +245,31 @@ export class Game {
     window.addEventListener('resize', () => this.onWindowResize());
     
     console.log('[Game] Initialization complete');
+  }
+  
+  /**
+   * Spawn starting Command Centers for both teams
+   */
+  spawnStartingBases() {
+    // Player Command Center (team 0, left side)
+    const playerBase = this.buildingSystem.placeBuilding(
+      'command_center',
+      -50,
+      0,
+      0,
+      true // Skip construction, instant
+    );
+    
+    // Enemy Command Center (team 1, right side)
+    const enemyBase = this.buildingSystem.placeBuilding(
+      'command_center',
+      50,
+      0,
+      1,
+      true // Skip construction, instant
+    );
+    
+    console.log('[Game] Spawned starting Command Centers for both teams');
   }
   
   /**
@@ -277,6 +316,9 @@ export class Game {
     this.renderer.domElement.addEventListener('contextmenu', (event) => {
       event.preventDefault(); // Prevent context menu
       
+      // Ignore if in building mode
+      if (this.buildingMode) return;
+      
       // Only if units are selected
       if (!this.selectionSystem.hasSelection()) return;
       
@@ -318,9 +360,219 @@ export class Game {
           this.healthBarSystem.toggleShowAll();
         }
       }
+      
+      // B key: Toggle building mode
+      if (event.key === 'b' || event.key === 'B') {
+        this.toggleBuildingMode();
+      }
+      
+      // ESC: Cancel building mode
+      if (event.key === 'Escape') {
+        if (this.buildingMode) {
+          this.toggleBuildingMode();
+        }
+      }
+      
+      // Q key: Select Barracks
+      if (event.key === 'q' || event.key === 'Q') {
+        this.selectBuilding('barracks');
+      }
+      
+      // W key: Select Factory
+      if (event.key === 'w' || event.key === 'W') {
+        this.selectBuilding('factory');
+      }
+      
+      // E key: Select Shield Generator
+      if (event.key === 'e' || event.key === 'E') {
+        this.selectBuilding('shield_generator');
+      }
     });
     
-    console.log('[Game] Keyboard shortcuts: H = toggle health bars');
+    console.log('[Game] Keyboard shortcuts: H = health bars, B = building mode, Q/W/E = buildings');
+  }
+  
+  /**
+   * Toggle building placement mode
+   */
+  toggleBuildingMode() {
+    this.buildingMode = !this.buildingMode;
+    
+    if (this.buildingMode) {
+      console.log('[Game] Building mode ENABLED');
+      this.updateBuildingUI();
+    } else {
+      console.log('[Game] Building mode DISABLED');
+      this.selectedBuildingType = null;
+      this.removeBuildingGhost();
+      this.updateBuildingUI();
+    }
+  }
+  
+  /**
+   * Select a building type for placement
+   */
+  selectBuilding(buildingType) {
+    if (!this.buildingMode) {
+      this.buildingMode = true;
+    }
+    
+    this.selectedBuildingType = buildingType;
+    this.createBuildingGhost(buildingType);
+    this.updateBuildingUI();
+    
+    console.log(`[Game] Selected building: ${buildingType}`);
+  }
+  
+  /**
+   * Create ghost preview of building
+   */
+  createBuildingGhost(buildingType) {
+    this.removeBuildingGhost();
+    
+    // Create ghost geometry based on type
+    let geometry;
+    switch(buildingType) {
+      case 'command_center':
+        geometry = new THREE.BoxGeometry(6, 3, 6);
+        break;
+      case 'barracks':
+        geometry = new THREE.BoxGeometry(4, 2, 4);
+        break;
+      case 'factory':
+        geometry = new THREE.BoxGeometry(5, 2.5, 5);
+        break;
+      case 'shield_generator':
+        geometry = new THREE.BoxGeometry(2, 4, 2);
+        break;
+    }
+    
+    const material = new THREE.MeshBasicMaterial({
+      color: 0x00ff00,
+      transparent: true,
+      opacity: 0.5,
+      wireframe: false
+    });
+    
+    this.buildingGhost = new THREE.Mesh(geometry, material);
+    this.buildingGhost.position.y = 100; // Start offscreen
+    this.scene.add(this.buildingGhost);
+  }
+  
+  /**
+   * Remove building ghost preview
+   */
+  removeBuildingGhost() {
+    if (this.buildingGhost) {
+      this.scene.remove(this.buildingGhost);
+      this.buildingGhost.geometry.dispose();
+      this.buildingGhost.material.dispose();
+      this.buildingGhost = null;
+    }
+  }
+  
+  /**
+   * Update building ghost position
+   */
+  updateBuildingGhost(event) {
+    if (!this.buildingGhost) return;
+    
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const mouse = new THREE.Vector2();
+    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(mouse, this.camera);
+    
+    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const target = new THREE.Vector3();
+    raycaster.ray.intersectPlane(plane, target);
+    
+    if (target) {
+      this.buildingGhost.position.copy(target);
+      this.buildingGhost.position.y = this.buildingGhost.geometry.parameters.height / 2;
+      
+      // Check if placement is valid (simplified - just check not too close to other buildings)
+      this.buildingGhostValid = true; // TODO: Add collision check
+      this.buildingGhost.material.color.setHex(this.buildingGhostValid ? 0x00ff00 : 0xff0000);
+    }
+  }
+  
+  /**
+   * Setup building placement input
+   */
+  setupBuildingPlacement() {
+    // Track mouse movement for ghost
+    this.renderer.domElement.addEventListener('mousemove', (event) => {
+      if (this.buildingMode && this.selectedBuildingType) {
+        this.updateBuildingGhost(event);
+      }
+    });
+    
+    // Left click to place building
+    this.renderer.domElement.addEventListener('click', (event) => {
+      if (this.buildingMode && this.selectedBuildingType && this.buildingGhost) {
+        const pos = this.buildingGhost.position;
+        
+        if (this.buildingGhostValid) {
+          // Place the building
+          this.buildingSystem.placeBuilding(
+            this.selectedBuildingType,
+            pos.x,
+            pos.z,
+            0, // Player team
+            false // Don't skip construction
+          );
+          
+          console.log(`[Game] Placed ${this.selectedBuildingType} at (${pos.x.toFixed(1)}, ${pos.z.toFixed(1)})`);
+          
+          // Exit building mode
+          this.toggleBuildingMode();
+        }
+      }
+    });
+    
+    // Setup building button UI
+    if (typeof document !== 'undefined') {
+      const buttons = document.querySelectorAll('.building-button');
+      buttons.forEach(button => {
+        button.addEventListener('click', () => {
+          const buildingType = button.getAttribute('data-building');
+          this.selectBuilding(buildingType);
+        });
+      });
+    }
+    
+    console.log('[Game] Building placement setup complete');
+  }
+  
+  /**
+   * Update building UI
+   */
+  updateBuildingUI() {
+    if (typeof document === 'undefined') return;
+    
+    const modeText = document.getElementById('building-mode-text');
+    if (modeText) {
+      if (this.buildingMode && this.selectedBuildingType) {
+        modeText.innerHTML = `<strong style="color: #4ade80;">BUILDING MODE</strong><br>Click to place ${this.selectedBuildingType}`;
+      } else if (this.buildingMode) {
+        modeText.innerHTML = '<strong style="color: #4ade80;">BUILDING MODE</strong><br>Select a building type';
+      } else {
+        modeText.innerHTML = 'Press <strong>B</strong> to enter building mode';
+      }
+    }
+    
+    // Update button active states
+    document.querySelectorAll('.building-button').forEach(button => {
+      const buildingType = button.getAttribute('data-building');
+      if (this.selectedBuildingType === buildingType) {
+        button.classList.add('active');
+      } else {
+        button.classList.remove('active');
+      }
+    });
   }
   
   /**
@@ -502,6 +754,10 @@ export class Game {
       this.unitSystem.update(dt);
     }
     
+    if (this.buildingSystem) {
+      this.buildingSystem.update(dt);
+    }
+    
     if (this.combatSystem) {
       this.combatSystem.update(dt);
     }
@@ -527,6 +783,10 @@ export class Game {
     // Update visual representations (instance matrices)
     if (this.unitSystem) {
       this.unitSystem.render();
+    }
+    
+    if (this.buildingSystem) {
+      this.buildingSystem.render();
     }
     
     if (this.combatSystem) {
