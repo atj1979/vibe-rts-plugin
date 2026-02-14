@@ -21,6 +21,7 @@
 
 import * as THREE from 'three';
 import { createXRSession } from '../utils/WebXRUtils.js';
+import { UnitSystem } from '../systems/UnitSystem.js';
 
 export class Game {
   /**
@@ -179,15 +180,31 @@ export class Game {
     // Add demo cube to verify rendering
     this.createDemoCube();
     
-    // Systems will be initialized here (next phase)
-    // this.unitSystem = new UnitSystem();
+    // Initialize game systems
+    this.unitSystem = new UnitSystem(this.scene);
+    
+    // Spawn some demo units for testing
+    this.spawnDemoUnits();
+    
+    // Future systems:
     // this.combatSystem = new CombatSystem();
-    // etc.
+    // this.resourceSystem = new ResourceSystem();
     
     // Handle window resize
     window.addEventListener('resize', () => this.onWindowResize());
     
     console.log('[Game] Initialization complete');
+  }
+  
+  /**
+   * Spawn demo units for testing
+   * PERFORMANCE TEST: Spawning 50 units with instanced rendering
+   */
+  spawnDemoUnits() {
+    // Spawn 50 random units for performance testing
+    // With instanced rendering, this should still be 5 draw calls total
+    this.unitSystem.spawnRandomUnits(50);
+    console.log('[Game] Spawned 50 demo units for performance testing');
   }
   
   /**
@@ -326,8 +343,12 @@ export class Game {
       this.demoCube.rotation.x += dt * 0.3;
     }
     
-    // Future: Update game systems
-    // this.unitSystem.update(dt);
+    // Update game systems
+    if (this.unitSystem) {
+      this.unitSystem.update(dt);
+    }
+    
+    // Future: More systems
     // this.combatSystem.update(dt);
     // this.resourceSystem.update(dt);
   }
@@ -338,6 +359,11 @@ export class Game {
    * @param {number} alpha - Interpolation factor (0-1)
    */
   render(alpha) {
+    // Update visual representations (instance matrices)
+    if (this.unitSystem) {
+      this.unitSystem.render();
+    }
+    
     // In VR mode, renderer.render is called automatically per eye
     // In desktop mode, we call it manually
     if (!this.isVRMode) {
