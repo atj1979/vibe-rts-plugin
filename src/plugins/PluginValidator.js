@@ -13,6 +13,36 @@ function addIssue(issues, level, message, context = null) {
   issues.push({ level, message, context });
 }
 
+function validateResourceId(resourceId, resourceIds, issues) {
+  if (!isNonEmptyString(resourceId)) {
+    addIssue(issues, 'error', 'Resource id must be a non-empty string.');
+    return false;
+  }
+  if (!resourceIds.has(resourceId)) {
+    addIssue(issues, 'error', `Unknown resource id: ${resourceId}.`);
+    return false;
+  }
+  return true;
+}
+
+function validateCosts(costs, resourceIds, entityId, issues) {
+  if (costs === undefined || costs === null) {
+    return; // Optional
+  }
+  if (typeof costs !== 'object' || Array.isArray(costs)) {
+    addIssue(issues, 'warn', `${entityId} costs should be an object mapping resource ids to amounts.`);
+    return;
+  }
+  Object.entries(costs).forEach(([resId, amount]) => {
+    if (!resourceIds.has(resId)) {
+      addIssue(issues, 'warn', `${entityId} references unknown resource id in costs: ${resId}.`);
+    }
+    if (!isFiniteNumber(amount) || amount < 0) {
+      addIssue(issues, 'warn', `${entityId} costs.${resId} must be a non-negative number.`);
+    }
+  });
+}
+
 function validateManifest(manifest, issues) {
   if (!manifest || typeof manifest !== 'object') {
     addIssue(issues, 'error', 'Missing manifest object.');
@@ -32,7 +62,7 @@ function validateManifest(manifest, issues) {
   }
 }
 
-function validateUnitDefinition(unit, unitIds, issues) {
+function validateUnitDefinition(unit, unitIds, resourceIds, issues) {
   if (!unit || typeof unit !== 'object') {
     addIssue(issues, 'error', 'Unit definition is not an object.');
     return;
@@ -63,9 +93,22 @@ function validateUnitDefinition(unit, unitIds, issues) {
       addIssue(issues, 'error', `Unit ${unit.id || '(unknown)'} stats.${field} must be a number.`);
     }
   });
+
+  // Validate costs
+  validateCosts(unit.costs, resourceIds, `Unit ${unit.id}`, issues);
+
+  // Validate gatherer flag
+  if (unit.gatherer !== undefined && typeof unit.gatherer !== 'boolean') {
+    addIssue(issues, 'warn', `Unit ${unit.id} gatherer should be true or false.`);
+  }
+
+  // Validate gather rate if gatherer
+  if (unit.gatherer === true && !isFiniteNumber(unit.gatherRate)) {
+    addIssue(issues, 'warn', `Unit ${unit.id} has gatherer=true but missing or invalid gatherRate.`);
+  }
 }
 
-function validateBuildingDefinition(building, unitIds, buildingIds, issues) {
+function validateBuildingDefinition(building, unitIds, resourceIds, buildingIds, issues) {
   if (!building || typeof building !== 'object') {
     addIssue(issues, 'error', 'Building definition is not an object.');
     return;
@@ -135,6 +178,19 @@ function validateBuildingDefinition(building, unitIds, buildingIds, issues) {
       addIssue(issues, 'warn', `Building ${building.id || '(unknown)'} shield should be an object or null.`);
     }
   }
+
+  // Validate costs
+  validateCosts(building.costs, resourceIds, `Building ${building.id}`, issues);
+
+  // Validate resourceDepot flag
+  if (building.resourceDepot !== undefined && typeof building.resourceDepot !== 'boolean') {
+    addIssue(issues, 'warn', `Building ${building.id} resourceDepot should be true or false.`);
+  }
+
+  // Validate starting resources if present
+  if (building.startingResources !== undefined) {
+    validateCosts(building.startingResources, resourceIds, `Building ${building.id} startingResources`, issues);
+  }
 }
 
 export function validatePluginGroup(group) {
@@ -146,6 +202,36 @@ export function validatePluginGroup(group) {
   }
 
   validateManifest(group.manifest, issues);
+
+  // Validate resources
+  const resources = Array.isArray(group.resources) ? group.resources : null;
+  const resourceIds = new Set();
+  if (resources) {
+    if (resources.length < 1 || resources.length > 5) {
+      addIssue(issues, 'warn', 'Plugin group should define 1-5 resources.');
+    }
+    resources.forEach(resource => {
+      if (!resource || typeof resource !== 'object') {
+        addIssue(issues, 'error', 'Resource definition is not an object.');
+        return;
+      }
+      if (!isNonEmptyString(resource.id)) {
+        addIssue(issues, 'error', 'Resource is missing an id.');
+      } else if (resourceIds.has(resource.id)) {
+        addIssue(issues, 'error', `Duplicate resource id: ${resource.id}.`);
+      } else {
+        resourceIds.add(resource.id);
+      }
+      if (!isNonEmptyString(resource.name)) {
+        addIssue(issues, 'warn', `Resource ${resource.id} is missing a name.`);
+      }
+      if (typeof resource.color !== 'number') {
+        addIssue(issues, 'warn', `Resource ${resource.id} should have a color (hex number).`);
+      }
+    });
+  } else {
+    addIssue(issues, 'warn', 'Plugin group should define resources array.');
+  }
 
   const units = Array.isArray(group.units) ? group.units : null;
   if (!units) {
@@ -161,11 +247,11 @@ export function validatePluginGroup(group) {
   const buildingIds = new Set();
 
   if (units) {
-    units.forEach(unit => validateUnitDefinition(unit, unitIds, issues));
+    units.forEach(unit => validateUnitDefinition(unit, unitIds, resourceIds, issues));
   }
 
   if (buildings) {
-    buildings.forEach(building => validateBuildingDefinition(building, unitIds, buildingIds, issues));
+    buildings.forEach(building => validateBuildingDefinition(building, unitIds, resourceIds, buildingIds, issues));
   }
 
   REQUIRED_UNIT_IDS.forEach(unitId => {
