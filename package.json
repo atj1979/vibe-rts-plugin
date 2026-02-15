@@ -1,5 +1,5 @@
 {
-  "name": "something-vibe",
+  "name": "vibe-rts-plugin",
   "version": "0.1.0",
   "description": "A high-performance web-based VR RTS game built with Three.js and WebXR",
   "type": "module",
