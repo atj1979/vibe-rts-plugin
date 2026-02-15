@@ -252,6 +252,72 @@ Create an accessible, browser-based VR RTS experience that leverages the spatial
 
 ---
 
+## VR-Specific Mechanics & Features
+
+### Core VR Mechanics
+
+#### 1. **Spatial UI Panels**
+- Immersive UI elements positioned in 3D space around the player's head
+- Info, Stats, Building, Production panels positioned at cardinal directions
+- No flat-screen overlay; everything integrated into the 3D world
+- Supports plugin-defined custom panels for extended functionality
+
+#### 2. **Hand Gesture Controls**
+- **Pinch Grip**: Select and grab units/buildings for dragging
+- **Point & Trigger**: Aim controller laser to select and command units
+- **Swipe Motions**: Quick commands (swipe up = attack, down = defend, etc.)
+- **Two-Hand Gestures**: Combined controller actions for complex commands (scale battlefield, rotate view)
+
+#### 3. **Haptic Feedback**
+- **Selection Vibration**: Controller pulses when unit/building is selected
+- **Attack Confirmation**: Rhythmic pulse when units engage enemies
+- **Building Completion**: Distinctive haptic pattern when structures finish constructing
+- **Damage Feedback**: Intensity correlates with amount of damage taken by selected units
+
+#### 4. **Scale & Perspective Freedom**
+- **Godmode Toggle**: Instantly zoom out to overhead view or zoom in for tactical view
+- **Teleport Navigation**: Point and press button to instantly move to that location on the battlefield
+- **Height Adjustment**: Move head vertically to scout different elevations without moving physically
+- **Perspective Shifting**: Experience the battlefield from unit eye-level or strategic overview
+
+#### 5. **Spatial Audio Design**
+- **3D Positional Audio**: Unit sounds (footsteps, gunfire, engines) come from their actual location in the battlefield
+- **Spatial Warnings**: Audio cue indicates direction of enemy approach or base under attack
+- **Voice Feedback**: Units confirm orders with spatial 3D voice ("Moving out!", "Building complete!")
+- **Environmental Ambience**: Battle sounds enhance immersion based on proximity to combat
+
+#### 6. **Immersive Minimap**
+- **3D Tactical Map**: Floating holographic minimap that can be interacted with
+- **Gesture Control**: Draw attack routes directly on the map with controller motion
+- **Depth Indicator**: Visual representation of unit positions in 3D space on the map
+- **Fog of War Visualization**: Semi-transparent areas show unexplored regions
+
+#### 7. **Direct Manipulation**
+- **Physical Dragging**: Grab and drag units/formations by pinching and moving controller
+- **Inertia-Based Movement**: Flick units to send them in a direction with momentum
+- **Building Placement**: Grab building templates and place them directly in world space with visual preview
+- **Object Rotation**: Rotate buildings/formations with two-hand gestures before confirming placement
+
+#### 8. **Immersive Command Center**
+- **Holographic Table**: Interact with a tactical command table at arm's reach
+- **Resource Display**: Real-time resource visualization as particles or floating numbers
+- **Status Indicators**: Floating health/status bars above units visible in peripheral vision
+- **Alert System**: Priority notifications via visual and haptic cues, not intrusive overlays
+
+#### 9. **Environmental Presence**
+- **Body Presence**: Your position and head orientation affect what units can see/where you're "standing"
+- **Cast Shadows**: Your avatar casts shadows on the battlefield
+- **Movement Restriction Zones**: Certain areas may require you to navigate around them physically
+- **Depth Perception**: Natural VR depth makes unit positioning and spacing more intuitive
+
+#### 10. **Persistent VR Sessions**
+- **Save Spatial State**: Remember player position, camera angle, and UI layout preferences
+- **Cross-Session Continuity**: Return to your exact battlefield position and state next session
+- **VR-Specific Settings**: FOV sensitivity, UI brightness, haptic intensity stored per headset
+- **Motion Profiles**: Different control schemes for standing, sitting, or mobility-limited players
+
+---
+
 ## Development Priorities
 
 ### Phase 1: Prototype (Core Loop)
