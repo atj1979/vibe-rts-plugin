@@ -305,13 +305,20 @@ export class SelectionSystem {
 
   /**
    * Create visual selection indicator for a unit
+   * Ring size automatically scales based on unit type
    * @param {Unit} unit - Unit to add indicator to
    */
   createSelectionIndicator(unit) {
     if (!this.scene) return;
 
-    // Create a ring around the unit
-    const geometry = new THREE.RingGeometry(0.6, 0.8, 16);
+    // Get unit scale to size the selection ring
+    const unitScale = this.unitSystem.getUnitScaleForType(unit.type);
+    const scaleAverage = (unitScale.x + unitScale.z) / 2; // Average X and Z for ring size
+
+    // Create a ring around the unit, scaled to unit size
+    const innerRadius = 0.6 * scaleAverage;
+    const outerRadius = 0.8 * scaleAverage;
+    const geometry = new THREE.RingGeometry(innerRadius, outerRadius, 16);
     const material = new THREE.MeshBasicMaterial({
       color: 0x00ff00,
       side: THREE.DoubleSide,

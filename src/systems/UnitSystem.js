@@ -114,8 +114,7 @@ export class UnitSystem {
 
       // Store height for Y-positioning (bounding box height / 2 for center offset)
       if (geometry.boundingBox) {
-        const height =
-          geometry.boundingBox.max.y - geometry.boundingBox.min.y;
+        const height = geometry.boundingBox.max.y - geometry.boundingBox.min.y;
         this.unitHeights[type] = height / 2;
       } else {
         this.unitHeights[type] = 0.5; // Fallback
@@ -141,32 +140,34 @@ export class UnitSystem {
   }
 
   /**
+   * Get scale for a unit type
+   * PATTERN: Central source of truth for unit sizes
+   * @param {string} type - Unit type
+   * @returns {object} Scale with x, y, z properties
+   */
+  getUnitScaleForType(type) {
+    switch (type) {
+      case UnitType.SCOUT:
+        return { x: 0.8, y: 0.8, z: 0.8 }; // Small
+      case UnitType.SOLDIER:
+        return { x: 1.0, y: 1.0, z: 1.0 }; // Medium
+      case UnitType.TANK:
+        return { x: 1.5, y: 1.2, z: 1.5 }; // Large and wide
+      case UnitType.ARTILLERY:
+        return { x: 1.0, y: 1.5, z: 1.0 }; // Tall
+      case UnitType.CONSTRUCTOR:
+        return { x: 1.2, y: 0.8, z: 1.2 }; // Wide and short
+      default:
+        return { x: 1.0, y: 1.0, z: 1.0 };
+    }
+  }
+
+  /**
    * Scale geometry based on unit type
    * PATTERN: Different unit types have different sizes
    */
   scaleGeometryForType(geometry, type) {
-    let scale;
-
-    switch (type) {
-      case UnitType.SCOUT:
-        scale = { x: 0.8, y: 0.8, z: 0.8 }; // Small
-        break;
-      case UnitType.SOLDIER:
-        scale = { x: 1.0, y: 1.0, z: 1.0 }; // Medium
-        break;
-      case UnitType.TANK:
-        scale = { x: 1.5, y: 1.2, z: 1.5 }; // Large and wide
-        break;
-      case UnitType.ARTILLERY:
-        scale = { x: 1.0, y: 1.5, z: 1.0 }; // Tall
-        break;
-      case UnitType.CONSTRUCTOR:
-        scale = { x: 1.2, y: 0.8, z: 1.2 }; // Wide and short
-        break;
-      default:
-        scale = { x: 1.0, y: 1.0, z: 1.0 };
-    }
-
+    const scale = this.getUnitScaleForType(type);
     geometry.scale(scale.x, scale.y, scale.z);
   }
 

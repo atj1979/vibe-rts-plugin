@@ -106,8 +106,7 @@ export class BuildingSystem {
 
       // Calculate and store height from bounding box for automatic Y offset
       if (geometry.boundingBox) {
-        const height =
-          geometry.boundingBox.max.y - geometry.boundingBox.min.y;
+        const height = geometry.boundingBox.max.y - geometry.boundingBox.min.y;
         this.buildingHeights[type] = height / 2; // Store half-height for Y offset
       }
 
@@ -133,26 +132,32 @@ export class BuildingSystem {
   /**
    * Scale geometry based on building type
    */
-  scaleGeometryForType(geometry, type) {
-    let scale;
-
+  /**
+   * Get scale for a building type
+   * PATTERN: Central source of truth for building sizes
+   * @param {string} type - Building type
+   * @returns {object} Scale with x, y, z properties
+   */
+  getBuildingScaleForType(type) {
     switch (type) {
       case BuildingType.COMMAND_CENTER:
-        scale = { x: 6, y: 3, z: 6 }; // Large, flat
-        break;
+        return { x: 6, y: 3, z: 6 }; // Large, flat
       case BuildingType.BARRACKS:
-        scale = { x: 4, y: 2, z: 4 }; // Medium
-        break;
+        return { x: 4, y: 2, z: 4 }; // Medium
       case BuildingType.FACTORY:
-        scale = { x: 5, y: 2.5, z: 5 }; // Large, medium height
-        break;
+        return { x: 5, y: 2.5, z: 5 }; // Large, medium height
       case BuildingType.SHIELD_GENERATOR:
-        scale = { x: 2, y: 4, z: 2 }; // Tall, thin
-        break;
+        return { x: 2, y: 4, z: 2 }; // Tall, thin
       default:
-        scale = { x: 3, y: 2, z: 3 };
+        return { x: 3, y: 2, z: 3 };
     }
+  }
 
+  /**
+   * Scale geometry based on building type
+   */
+  scaleGeometryForType(geometry, type) {
+    const scale = this.getBuildingScaleForType(type);
     geometry.scale(scale.x, scale.y, scale.z);
   }
 
@@ -423,26 +428,18 @@ export class BuildingSystem {
 
   /**
    * Create selection indicator for building
+   * Ring size automatically scales based on building type
    */
   createSelectionIndicator(building) {
-    // Size based on building type
-    let size = 4;
-    switch (building.type) {
-      case BuildingType.COMMAND_CENTER:
-        size = 7;
-        break;
-      case BuildingType.BARRACKS:
-        size = 5;
-        break;
-      case BuildingType.FACTORY:
-        size = 6;
-        break;
-      case BuildingType.SHIELD_GENERATOR:
-        size = 3;
-        break;
-    }
+    // Get building scale to size the selection ring
+    const buildingScale = this.getBuildingScaleForType(building.type);
+    const scaleAverage = (buildingScale.x + buildingScale.z) / 2; // Average X and Z for ring size
+    
+    // Ring scales to building size (base size proportional to unit selection ring)
+    const innerRadius = 0.6 * scaleAverage;
+    const outerRadius = 0.8 * scaleAverage;
 
-    const geometry = new THREE.RingGeometry(size, size + 0.5, 32);
+    const geometry = new THREE.RingGeometry(innerRadius, outerRadius, 32);
     const material = new THREE.MeshBasicMaterial({
       color: 0x00ff00,
       side: THREE.DoubleSide,
