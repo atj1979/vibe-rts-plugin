@@ -434,7 +434,7 @@ export class BuildingSystem {
     // Get building scale to size the selection ring
     const buildingScale = this.getBuildingScaleForType(building.type);
     const scaleAverage = (buildingScale.x + buildingScale.z) / 2; // Average X and Z for ring size
-    
+
     // Ring scales to building size (base size proportional to unit selection ring)
     const innerRadius = 0.6 * scaleAverage;
     const outerRadius = 0.8 * scaleAverage;

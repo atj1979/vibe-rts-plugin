@@ -1,12 +1,12 @@
-import { pluginGroups } from '@atj1979/vibe-rts-plugins';
-import { validatePluginGroup } from './PluginValidator.js';
+import { pluginGroups } from "@atj1979/vibe-rts-plugins";
+import { validatePluginGroup } from "./PluginValidator.js";
 
 export class PluginManager {
   constructor() {
     this.groups = new Map();
     this.activeGroupId = null;
 
-    pluginGroups.forEach(group => {
+    pluginGroups.forEach((group) => {
       if (!group?.manifest?.id) return;
       this.groups.set(group.manifest.id, group);
     });
@@ -16,7 +16,7 @@ export class PluginManager {
   }
 
   listGroups() {
-    return Array.from(this.groups.values()).map(group => group.manifest);
+    return Array.from(this.groups.values()).map((group) => group.manifest);
   }
 
   setActiveGroup(groupId) {
@@ -34,13 +34,25 @@ export class PluginManager {
   getUnitDefinition(unitId) {
     const group = this.getActiveGroup();
     if (!group) return null;
-    return group.units?.find(unit => unit.id === unitId) || null;
+    return group.units?.find((unit) => unit.id === unitId) || null;
   }
 
   getBuildingDefinition(buildingId) {
     const group = this.getActiveGroup();
     if (!group) return null;
-    return group.buildings?.find(building => building.id === buildingId) || null;
+    return (
+      group.buildings?.find((building) => building.id === buildingId) || null
+    );
+  }
+
+  /**
+   * Get custom VR UI panel definitions from active plugin group
+   * @returns {Array} Array of panel definitions
+   */
+  getVRUIPanels() {
+    const group = this.getActiveGroup();
+    if (!group) return [];
+    return group.uiPanels || [];
   }
 
   validateActiveGroup() {
