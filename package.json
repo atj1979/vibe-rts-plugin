@@ -21,7 +21,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@atj1979/vibe-rts-plugins": "github:atj1979/vibe-rts-plugins#v0.1.0",
+    "@atj1979/vibe-rts-plugins": "github:atj1979/vibe-rts-plugins",
     "three": "^0.163.0"
   },
   "devDependencies": {
