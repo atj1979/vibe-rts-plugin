@@ -69,6 +69,9 @@ export class UnitSystem {
       [UnitType.CONSTRUCTOR]: 0xff8844, // Orange
     };
 
+    // Unit heights (calculated from geometry bounding boxes)
+    this.unitHeights = {};
+
     // Initialize rendering
     this.createInstancedMeshes();
 
@@ -107,6 +110,16 @@ export class UnitSystem {
       // Clone geometry and scale based on type
       const geometry = baseGeometry.clone();
       this.scaleGeometryForType(geometry, type);
+      geometry.computeBoundingBox();
+
+      // Store height for Y-positioning (bounding box height / 2 for center offset)
+      if (geometry.boundingBox) {
+        const height =
+          geometry.boundingBox.max.y - geometry.boundingBox.min.y;
+        this.unitHeights[type] = height / 2;
+      } else {
+        this.unitHeights[type] = 0.5; // Fallback
+      }
 
       // Create instanced mesh
       const mesh = new THREE.InstancedMesh(geometry, material, maxUnitsPerType);
@@ -303,26 +316,9 @@ export class UnitSystem {
       units.forEach((unit, index) => {
         // Set position
         this.tempPosition.copy(unit.position);
-        
-        // Apply Y offset based on unit type height
-        let yOffset = 0.5; // Default (half of 1.0 scale)
-        switch(unit.type) {
-          case UnitType.SCOUT:
-            yOffset = 0.8 / 2; // height 0.8 -> offset 0.4
-            break;
-          case UnitType.SOLDIER:
-            yOffset = 1.0 / 2; // height 1.0 -> offset 0.5
-            break;
-          case UnitType.TANK:
-            yOffset = 1.2 / 2; // height 1.2 -> offset 0.6
-            break;
-          case UnitType.ARTILLERY:
-            yOffset = 1.5 / 2; // height 1.5 -> offset 0.75
-            break;
-          case UnitType.CONSTRUCTOR:
-            yOffset = 0.8 / 2; // height 0.8 -> offset 0.4
-            break;
-        }
+
+        // Apply Y offset based on unit type height (auto-calculated from bounding box)
+        const yOffset = this.unitHeights[unit.type] || 0.5;
         this.tempPosition.y = yOffset;
 
         // Set rotation (Y-axis only for now)

@@ -49,6 +49,9 @@ export class BuildingSystem {
     // Instanced meshes for each building type
     this.instancedMeshes = {};
 
+    // Building heights (calculated from bounding boxes)
+    this.buildingHeights = {};
+
     // Selection indicators
     this.selectionIndicators = new Map(); // building -> indicator mesh
 
@@ -100,6 +103,13 @@ export class BuildingSystem {
       this.scaleGeometryForType(geometry, type);
       geometry.computeBoundingBox();
       geometry.computeBoundingSphere();
+
+      // Calculate and store height from bounding box for automatic Y offset
+      if (geometry.boundingBox) {
+        const height =
+          geometry.boundingBox.max.y - geometry.boundingBox.min.y;
+        this.buildingHeights[type] = height / 2; // Store half-height for Y offset
+      }
 
       // Create instanced mesh
       const mesh = new THREE.InstancedMesh(
@@ -323,22 +333,8 @@ export class BuildingSystem {
         // Position
         this.tempPosition.copy(building.position);
 
-        // Calculate Y offset based on building type height
-        let yOffset = 1.5; // Default
-        switch (building.type) {
-          case BuildingType.COMMAND_CENTER:
-            yOffset = 3 / 2; // height 3 -> center at 1.5
-            break;
-          case BuildingType.BARRACKS:
-            yOffset = 2 / 2; // height 2 -> center at 1.0
-            break;
-          case BuildingType.FACTORY:
-            yOffset = 2.5 / 2; // height 2.5 -> center at 1.25
-            break;
-          case BuildingType.SHIELD_GENERATOR:
-            yOffset = 4 / 2; // height 4 -> center at 2.0
-            break;
-        }
+        // Calculate Y offset based on building type height (auto-calculated from bounding box)
+        const yOffset = this.buildingHeights[building.type] || 1.5;
         this.tempPosition.y = yOffset;
 
         // Rotation
