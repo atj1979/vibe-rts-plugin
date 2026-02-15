@@ -79,23 +79,31 @@ export class VRUIPanel {
    * @param {THREE.Camera} camera - VR camera
    */
   updatePosition(camera) {
-    // Get camera direction
-    const cameraDirection = new THREE.Vector3();
-    camera.getWorldDirection(cameraDirection);
+    if (!camera) {
+      console.warn("[VRUIPanel] No camera provided");
+      return;
+    }
 
-    // Calculate panel position in world space
-    const offset = new THREE.Vector3(
-      -this.position.x,
-      this.position.y,
-      this.position.z,
-    );
+    try {
+      // Calculate panel position in world space
+      const offset = new THREE.Vector3(
+        -this.position.x,
+        this.position.y,
+        this.position.z,
+      );
 
-    // Rotate offset to face away from camera (always visible)
-    offset.applyQuaternion(camera.quaternion);
+      // Rotate offset to face away from camera (always visible)
+      offset.applyQuaternion(camera.quaternion);
 
-    this.mesh.position.copy(camera.position).add(offset);
-    this.mesh.quaternion.copy(camera.quaternion);
-    this.mesh.rotateOnWorldAxis(new THREE.Vector3(0, 1, 0), this.rotation.y);
+      this.mesh.position.copy(camera.position).add(offset);
+      this.mesh.quaternion.copy(camera.quaternion);
+      this.mesh.rotateOnWorldAxis(new THREE.Vector3(0, 1, 0), this.rotation.y);
+    } catch (error) {
+      console.error(
+        `[VRUIPanel] Error updating position for ${this.title}:`,
+        error,
+      );
+    }
   }
 
   /**

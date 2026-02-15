@@ -84,15 +84,28 @@ export class VRUISystem {
 
   /**
    * Update all panels (position, render)
+   * Uses the scene's camera which is updated by WebXR each frame
    */
   update() {
-    this.panels.forEach((panel) => {
-      // Update position relative to camera
-      panel.updatePosition(this.camera);
+    // Get camera from scene (WebXR updates this each frame)
+    const activeCamera = this.scene.getObjectByProperty("isCamera", true) || this.camera;
+    
+    if (!activeCamera) {
+      console.warn("[VRUISystem] No active camera - cannot update panels");
+      return;
+    }
 
-      // Render content to canvas
-      panel.render();
-    });
+    try {
+      this.panels.forEach((panel) => {
+        // Update position relative to active camera
+        panel.updatePosition(activeCamera);
+
+        // Render content to canvas
+        panel.render();
+      });
+    } catch (error) {
+      console.error("[VRUISystem] Error updating panels:", error);
+    }
   }
 
   /**

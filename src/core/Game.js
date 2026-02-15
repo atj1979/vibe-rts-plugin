@@ -994,47 +994,62 @@ export class Game {
   gameLoop(time) {
     if (!this.isRunning || this.isPaused) return;
 
-    // Performance monitoring begin
-    this.performanceMonitor.begin();
+    try {
+      // Performance monitoring begin
+      this.performanceMonitor.begin();
 
-    // Calculate delta time
-    const currentTime = time || performance.now();
-    let deltaTime = currentTime - this.lastTime;
-    this.lastTime = currentTime;
+      // Calculate delta time
+      const currentTime = time || performance.now();
+      let deltaTime = currentTime - this.lastTime;
+      this.lastTime = currentTime;
 
-    // Cap delta time to prevent spiral of death
-    if (deltaTime > this.maxFrameTime) {
-      deltaTime = this.maxFrameTime;
-    }
-
-    // Accumulate time
-    this.accumulator += deltaTime;
-
-    // Fixed timestep updates (game logic)
-    let updateCount = 0;
-    while (this.accumulator >= this.fixedTimeStep) {
-      this.update(this.fixedTimeStep / 1000); // Convert to seconds
-      this.accumulator -= this.fixedTimeStep;
-
-      // Safety: prevent too many updates in one frame
-      updateCount++;
-      if (updateCount > 5) {
-        this.accumulator = 0;
+      // Cap delta time to prevent spiral of death
+      if (deltaTime > this.maxFrameTime) {
         console.warn(
-          "[Game] Too many updates in one frame, resetting accumulator",
+          `[Game] Large delta time: ${deltaTime.toFixed(1)}ms (capped to ${this.maxFrameTime}ms)`,
         );
-        break;
+        deltaTime = this.maxFrameTime;
       }
+
+      // Accumulate time
+      this.accumulator += deltaTime;
+
+      // Prevent accumulator from growing unbounded (safety check for VR stalls)
+      if (this.accumulator > this.maxFrameTime * 2) {
+        console.warn(
+          `[Game] Accumulator overflow: ${this.accumulator.toFixed(1)}ms, resetting`,
+        );
+        this.accumulator = this.fixedTimeStep;
+      }
+
+      // Fixed timestep updates (game logic)
+      let updateCount = 0;
+      while (this.accumulator >= this.fixedTimeStep) {
+        this.update(this.fixedTimeStep / 1000); // Convert to seconds
+        this.accumulator -= this.fixedTimeStep;
+
+        // Safety: prevent too many updates in one frame
+        updateCount++;
+        if (updateCount > 5) {
+          this.accumulator = 0;
+          console.warn(
+            "[Game] Too many updates in one frame (>5), dropping frames to catch up",
+          );
+          break;
+        }
+      }
+
+      // Calculate interpolation factor for smooth rendering
+      const alpha = this.accumulator / this.fixedTimeStep;
+
+      // Render (happens at display refresh rate)
+      this.render(alpha);
+
+      // Performance monitoring end
+      this.performanceMonitor.end(this.renderer);
+    } catch (error) {
+      console.error("[Game] Game loop error:", error);
     }
-
-    // Calculate interpolation factor for smooth rendering
-    const alpha = this.accumulator / this.fixedTimeStep;
-
-    // Render (happens at display refresh rate)
-    this.render(alpha);
-
-    // Performance monitoring end
-    this.performanceMonitor.end(this.renderer);
   }
 
   /**
@@ -1093,33 +1108,37 @@ export class Game {
    * @param {number} alpha - Interpolation factor (0-1)
    */
   render(alpha) {
-    // Update visual representations (instance matrices)
-    if (this.unitSystem) {
-      this.unitSystem.render();
-    }
+    try {
+      // Update visual representations (instance matrices)
+      if (this.unitSystem) {
+        this.unitSystem.render();
+      }
 
-    if (this.buildingSystem) {
-      this.buildingSystem.render();
-    }
+      if (this.buildingSystem) {
+        this.buildingSystem.render();
+      }
 
-    if (this.combatSystem) {
-      this.combatSystem.render();
-    }
+      if (this.combatSystem) {
+        this.combatSystem.render();
+      }
 
-    // Update VR UI panels
-    if (this.isVRMode && this.vrUISystem) {
-      this.vrUISystem.update();
-    }
+      // Update VR UI panels
+      if (this.isVRMode && this.vrUISystem) {
+        this.vrUISystem.update();
+      }
 
-    // Update desktop camera controls
-    if (!this.isVRMode && this.controls) {
-      this.controls.update();
-    }
+      // Update desktop camera controls
+      if (!this.isVRMode && this.controls) {
+        this.controls.update();
+      }
 
-    // In VR mode, renderer.render is called automatically per eye
-    // In desktop mode, we call it manually
-    if (!this.isVRMode) {
-      this.renderer.render(this.scene, this.camera);
+      // In VR mode, renderer.render is called automatically per eye by WebXRManager
+      // In desktop mode, we call it manually
+      if (!this.isVRMode) {
+        this.renderer.render(this.scene, this.camera);
+      }
+    } catch (error) {
+      console.error("[Game] Render error:", error);
     }
 
     // Debug: Log first render
@@ -1155,11 +1174,8 @@ export class Game {
       // Setup VR controllers
       this.setupVRControllers();
 
-      // Setup VR UI system
-      this.vrUISystem = new VRUISystem(
-        this.scene,
-        this.renderer.xr.getCamera(this.camera),
-      );
+      // Setup VR UI system (uses scene's camera which WebXR will update)
+      this.vrUISystem = new VRUISystem(this.scene, this.camera);
       this.vrUISystem.createDefaultPanels();
 
       // Load custom UI panels from plugins
