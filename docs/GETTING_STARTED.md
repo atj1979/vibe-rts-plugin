@@ -19,7 +19,7 @@ npm install
 npm run dev
 ```
 
-The server will start at `https://localhost:5173` (HTTPS required for WebXR)
+The server will start at `https://localhost:5173` (or the next available port). HTTPS is required for WebXR.
 
 ### 3. Open in Browser
 
@@ -30,7 +30,9 @@ You may see a security warning (self-signed certificate) - this is expected. Cli
 ### 4. Test Desktop View
 
 You should see:
-- A spinning blue cube
+- Units and two Command Centers on the battlefield
+- Building panel (bottom-left)
+- Production panel (appears when a building is selected)
 - Performance stats (top right)
 - "Enter VR" button (bottom)
 
@@ -59,51 +61,21 @@ Vite has hot module replacement (HMR). Changes to files automatically refresh th
 
 ### Making Changes
 
-Let's add a second cube to practice the workflow.
+Let's update the info panel title to verify HMR.
 
-**Edit `src/core/Game.js`:**
+**Edit `index.html`:**
 
-```javascript
-// In the initialize() method, after createDemoCube():
-createDemoCube() {
-  // ... existing code ...
-  
-  // Add a second cube
-  const geometry2 = new THREE.BoxGeometry(1, 1, 1);
-  const material2 = new THREE.MeshStandardMaterial({
-    color: 0xff6677, // Pink
-    roughness: 0.5,
-    metalness: 0.5
-  });
-  
-  const cube2 = new THREE.Mesh(geometry2, material2);
-  cube2.position.set(3, 0.5, 0); // Position to the right
-  cube2.castShadow = true;
-  cube2.receiveShadow = true;
-  
-  this.scene.add(cube2);
-  this.demoCube2 = cube2; // Store reference
-}
+```html
+<h3>Something Vibe - VR RTS</h3>
 ```
 
-**Update the update() method to animate it:**
+Change it to:
 
-```javascript
-update(dt) {
-  // Existing cube rotation
-  if (this.demoCube) {
-    this.demoCube.rotation.y += dt * 0.5;
-    this.demoCube.rotation.x += dt * 0.3;
-  }
-  
-  // New cube - bounce up and down
-  if (this.demoCube2) {
-    this.demoCube2.position.y = 0.5 + Math.sin(this.lastTime * 0.001) * 0.5;
-  }
-}
+```html
+<h3>Something Vibe - RTS Prototype</h3>
 ```
 
-Save and see both cubes animated!
+Save the file and the browser should refresh automatically.
 
 ---
 

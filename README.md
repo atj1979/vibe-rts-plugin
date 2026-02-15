@@ -81,23 +81,28 @@ After extensive research on web-based VR performance:
 
 ## 🎯 Development Status
 
-**Current Phase:** Planning Complete ✅
+**Current Phase:** Phase 2 - Systems & Polish ✅
 
 ### Completed
-- [x] Game design documentation
-- [x] Technical architecture planning
-- [x] Technology research and selection
-- [x] Development roadmap creation
+- [x] Core unit system (instanced rendering, 5 unit types)
+- [x] Selection and commanding (mouse raycast + right-click)
+- [x] Combat system with projectiles
+- [x] Health bars and team colors
+- [x] Building system (construction, production queues)
+- [x] Building placement UI and controls
+- [x] Rally points and production UI
+- [x] GitHub Pages deployment pipeline
 
 ### Next Steps
-1. Setup development environment (Week 1)
-2. Create Three.js + WebXR template
-3. Implement basic unit rendering
-4. Build VR controller input system
+1. Resource system (control nodes + energy)
+2. Constructor build behavior (move-to-build)
+3. Shield generator effects
+4. AI opponent basics
+5. Victory conditions
 
 ---
 
-## 🚀 Quick Start (When Development Begins)
+## 🚀 Quick Start
 
 ### Prerequisites
 - Node.js 18+ installed
@@ -107,8 +112,8 @@ After extensive research on web-based VR performance:
 ### Installation
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/something-vibe.git
-cd something-vibe
+git clone https://github.com/atj1979/vibe-rts-plugin.git
+cd vibe-rts-plugin
 
 # Install dependencies
 npm install
@@ -120,9 +125,12 @@ npm run dev
 npm run build
 ```
 
+### Live Demo (GitHub Pages)
+https://atj1979.github.io/vibe-rts-plugin/
+
 ### Testing in VR
 1. Connect your VR headset
-2. Navigate to `https://localhost:5173` in browser
+2. Navigate to the local dev URL shown in the terminal (usually `https://localhost:5173`)
 3. Click "Enter VR" button
 4. Put on headset and enjoy!
 

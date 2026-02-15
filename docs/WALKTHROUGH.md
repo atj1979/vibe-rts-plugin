@@ -39,6 +39,15 @@ This walkthrough is designed to help:
 └──────────────┬──────────────────────────┘
                │
 ┌──────────────▼──────────────────────────┐
+│         Gameplay Systems                │
+│  - UnitSystem (instanced units)         │
+│  - SelectionSystem (raycast select)     │
+│  - CombatSystem (targets + projectiles) │
+│  - BuildingSystem (construct/produce)   │
+│  - HealthBarSystem (units/buildings)    │
+└──────────────┬──────────────────────────┘
+               │
+┌──────────────▼──────────────────────────┐
 │         Utility Systems                 │
 │  - Performance Monitor                  │
 │  - Object Pools                         │
@@ -142,6 +151,10 @@ document.getElementById('ui-overlay').appendChild(settingsButton);
 
 **When to edit:** Core engine changes, rendering pipeline, VR handling
 
+**Current integrations:**
+- `UnitSystem`, `SelectionSystem`, `CombatSystem`, `BuildingSystem`, `HealthBarSystem`
+- Building placement, production UI updates, rally points
+
 **Example task:** "Add fog to the scene"
 ```javascript
 // Pattern to follow (in initScene method):
@@ -198,6 +211,18 @@ function shootBullet() {
   bullets.push(bullet);
 }
 ```
+
+---
+
+## 🔌 Plugin Data (Units/Buildings)
+
+Unit and building definitions are now mirrored into a separate plugin repo so the main game can load them by tag + group name.
+
+- Repo: https://github.com/atj1979/vibe-rts-plugins
+- Default group: `core`
+- Files: `src/plugins/core/units.js` and `src/plugins/core/buildings.js`
+
+The runtime loader is next to implement in this repo.
 
 Suggest this instead:
 ```javascript
