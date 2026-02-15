@@ -99,7 +99,8 @@ export class UnitSystem {
         color: this.unitColors[type],
         roughness: 0.7,
         metalness: 0.3,
-        flatShading: false
+        flatShading: false,
+        side: THREE.DoubleSide // Render both sides to fix disappearing issue
       });
       
       // Clone geometry and scale based on type

@@ -92,7 +92,8 @@ export class BuildingSystem {
         color: this.buildingColors[type],
         roughness: 0.6,
         metalness: 0.4,
-        flatShading: false
+        flatShading: false,
+        side: THREE.DoubleSide // Render both sides to prevent disappearing
       });
       
       // Clone and scale geometry based on type
