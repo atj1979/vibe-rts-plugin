@@ -33,10 +33,12 @@ export class Game {
    * Create game instance
    * @param {HTMLElement} container - DOM element to attach renderer
    * @param {PerformanceMonitor} performanceMonitor - Performance tracking
+   * @param {PluginManager|null} pluginManager - Plugin data manager
    */
-  constructor(container, performanceMonitor) {
+  constructor(container, performanceMonitor, pluginManager = null) {
     this.container = container;
     this.performanceMonitor = performanceMonitor;
+    this.pluginManager = pluginManager;
     
     // Game state
     this.isRunning = false;
@@ -223,8 +225,8 @@ export class Game {
     this.createDemoCube();
     
     // Initialize game systems
-    this.unitSystem = new UnitSystem(this.scene);
-    this.buildingSystem = new BuildingSystem(this.scene, this.unitSystem);
+    this.unitSystem = new UnitSystem(this.scene, this.pluginManager);
+    this.buildingSystem = new BuildingSystem(this.scene, this.unitSystem, this.pluginManager);
     this.combatSystem = new CombatSystem(this.scene, this.unitSystem);
     this.selectionSystem = new SelectionSystem(this.camera, this.renderer, this.unitSystem);
     this.selectionSystem.init(this.scene);

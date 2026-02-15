@@ -164,6 +164,35 @@ export class Unit {
         console.warn(`Unknown unit type: ${type}`);
     }
   }
+
+  /**
+   * Apply stats override from plugins
+   * @param {object} stats - Stats override
+   */
+  applyStats(stats) {
+    if (!stats || typeof stats !== 'object') return;
+
+    if (Number.isFinite(stats.maxHealth)) {
+      this.maxHealth = stats.maxHealth;
+      this.health = stats.maxHealth;
+    }
+
+    if (Number.isFinite(stats.speed)) {
+      this.speed = stats.speed;
+    }
+
+    if (Number.isFinite(stats.damage)) {
+      this.damage = stats.damage;
+    }
+
+    if (Number.isFinite(stats.attackRange)) {
+      this.attackRange = stats.attackRange;
+    }
+
+    if (Number.isFinite(stats.attackCooldown)) {
+      this.attackCooldown = stats.attackCooldown;
+    }
+  }
   
   /**
    * Update unit logic (called at 60Hz)

@@ -32,8 +32,9 @@ import { Unit, UnitType, UnitState } from '../entities/Unit.js';
 import { ObjectPool } from '../utils/ObjectPool.js';
 
 export class UnitSystem {
-  constructor(scene) {
+  constructor(scene, pluginManager = null) {
     this.scene = scene;
+    this.pluginManager = pluginManager;
     
     // Units organized by type for instanced rendering
     this.unitsByType = {
@@ -184,6 +185,12 @@ export class UnitSystem {
     // Initialize unit
     const position = new THREE.Vector3(x, 0.5, z);
     unit.init(type, position, team);
+
+    // Apply plugin-defined stats (if available)
+    const unitDef = this.pluginManager?.getUnitDefinition(type);
+    if (unitDef?.stats) {
+      unit.applyStats(unitDef.stats);
+    }
     
     // Generate unique ID
     unit.id = this.generateUnitId();

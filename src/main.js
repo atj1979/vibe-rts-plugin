@@ -19,6 +19,7 @@
 import { Game } from './core/Game.js';
 import { PerformanceMonitor } from './utils/PerformanceMonitor.js';
 import { checkWebXRSupport } from './utils/WebXRUtils.js';
+import { PluginManager } from './plugins/PluginManager.js';
 
 // DOM Elements
 const loadingScreen = document.getElementById('loading-screen');
@@ -29,6 +30,7 @@ const canvasContainer = document.getElementById('canvas-container');
 // Global game instance
 let game = null;
 let performanceMonitor = null;
+let pluginManager = null;
 
 /**
  * Initialize the application
@@ -48,14 +50,20 @@ async function init() {
     
     // Initialize performance monitoring
     performanceMonitor = new PerformanceMonitor();
+
+    // Load plugin groups
+    pluginManager = new PluginManager();
     
     // Create game instance
-    game = new Game(canvasContainer, performanceMonitor);
+    game = new Game(canvasContainer, performanceMonitor, pluginManager);
     
     // Initialize game (loads resources, sets up scene)
     await game.initialize();
     
     updateStatus('Ready!');
+
+    // Setup plugin selector UI
+    setupPluginUI();
     
     // Setup VR button based on support
     if (xrSupport.supported) {
@@ -179,6 +187,45 @@ function startPerformanceUI() {
       statsContainer.style.color = '#0f0';
     }
   }, 500);
+}
+
+/**
+ * Setup plugin selector UI
+ */
+function setupPluginUI() {
+  const select = document.getElementById('plugin-group-select');
+  if (!select || !pluginManager) return;
+
+  const groups = pluginManager.listGroups();
+  select.innerHTML = '';
+
+  if (groups.length === 0) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = 'No plugins available';
+    select.appendChild(option);
+    select.disabled = true;
+    return;
+  }
+
+  groups.forEach(group => {
+    const option = document.createElement('option');
+    option.value = group.id;
+    option.textContent = `${group.name} (${group.id})`;
+    select.appendChild(option);
+  });
+
+  const active = pluginManager.getActiveGroup();
+  if (active?.manifest?.id) {
+    select.value = active.manifest.id;
+  }
+
+  select.addEventListener('change', () => {
+    const ok = pluginManager.setActiveGroup(select.value);
+    if (ok) {
+      console.log(`[Plugins] Active group set to ${select.value}`);
+    }
+  });
 }
 
 /**

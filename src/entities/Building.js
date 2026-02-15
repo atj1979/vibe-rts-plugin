@@ -166,6 +166,51 @@ export class Building {
         this.health = 1000;
     }
   }
+
+  /**
+   * Apply plugin definition overrides
+   * @param {object} def - Building definition
+   */
+  applyStats(def) {
+    if (!def || typeof def !== 'object') return;
+
+    if (Number.isFinite(def.maxHealth)) {
+      this.maxHealth = def.maxHealth;
+      this.health = def.maxHealth;
+    }
+
+    if (Number.isFinite(def.constructionTime)) {
+      this.constructionTime = def.constructionTime;
+    }
+
+    if (typeof def.canProduce === 'boolean') {
+      this.canProduce = def.canProduce;
+    }
+
+    if (Array.isArray(def.producibleUnits)) {
+      this.producibleUnits = def.producibleUnits.slice();
+    }
+
+    if (Number.isFinite(def.productionTime)) {
+      this.productionTime = def.productionTime;
+    }
+
+    if ('shield' in def) {
+      if (def.shield && typeof def.shield === 'object') {
+        this.hasShield = true;
+        if (Number.isFinite(def.shield.radius)) {
+          this.shieldRadius = def.shield.radius;
+        }
+        if (Number.isFinite(def.shield.strength)) {
+          this.shieldStrength = def.shield.strength;
+        }
+      } else {
+        this.hasShield = false;
+        this.shieldRadius = 0;
+        this.shieldStrength = 0;
+      }
+    }
+  }
   
   /**
    * Update building logic

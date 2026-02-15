@@ -27,9 +27,10 @@ import { Building, BuildingType, BuildingState } from '../entities/Building.js';
 import { ObjectPool } from '../utils/ObjectPool.js';
 
 export class BuildingSystem {
-  constructor(scene, unitSystem) {
+  constructor(scene, unitSystem, pluginManager = null) {
     this.scene = scene;
     this.unitSystem = unitSystem;
+    this.pluginManager = pluginManager;
     
     // Buildings organized by type
     this.buildingsByType = {
@@ -160,6 +161,12 @@ export class BuildingSystem {
     // Initialize
     const position = new THREE.Vector3(x, 0, z);
     building.init(type, position, team, skipConstruction);
+
+    // Apply plugin-defined stats (if available)
+    const buildingDef = this.pluginManager?.getBuildingDefinition(type);
+    if (buildingDef) {
+      building.applyStats(buildingDef);
+    }
     
     // Generate unique ID
     building.id = this.generateBuildingId();
