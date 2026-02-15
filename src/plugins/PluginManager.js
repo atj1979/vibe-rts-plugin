@@ -1,4 +1,5 @@
 import { pluginGroups } from '@atj1979/vibe-rts-plugins';
+import { validatePluginGroup } from './PluginValidator.js';
 
 export class PluginManager {
   constructor() {
@@ -40,5 +41,10 @@ export class PluginManager {
     const group = this.getActiveGroup();
     if (!group) return null;
     return group.buildings?.find(building => building.id === buildingId) || null;
+  }
+
+  validateActiveGroup() {
+    const group = this.getActiveGroup();
+    return validatePluginGroup(group);
   }
 }

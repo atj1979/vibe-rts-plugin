@@ -20,6 +20,7 @@ import { Game } from './core/Game.js';
 import { PerformanceMonitor } from './utils/PerformanceMonitor.js';
 import { checkWebXRSupport } from './utils/WebXRUtils.js';
 import { PluginManager } from './plugins/PluginManager.js';
+import { formatIssue, getIssueSummary } from './plugins/PluginValidator.js';
 
 // DOM Elements
 const loadingScreen = document.getElementById('loading-screen');
@@ -224,7 +225,58 @@ function setupPluginUI() {
     const ok = pluginManager.setActiveGroup(select.value);
     if (ok) {
       console.log(`[Plugins] Active group set to ${select.value}`);
+      refreshPluginValidation();
     }
+  });
+
+  refreshPluginValidation();
+}
+
+function refreshPluginValidation() {
+  if (!pluginManager) return;
+
+  const validation = pluginManager.validateActiveGroup();
+  const summary = getIssueSummary(validation.issues);
+  const hasErrors = summary.error > 0;
+  const hasWarnings = summary.warn > 0;
+
+  if (validation.issues.length > 0) {
+    console.warn('[Plugins] Validation issues found:');
+    validation.issues.forEach(issue => {
+      console.warn(`- ${formatIssue(issue)}`);
+    });
+  } else {
+    console.log('[Plugins] Validation OK for active group.');
+  }
+
+  updatePluginValidationUI(validation.issues, hasErrors, hasWarnings);
+}
+
+function updatePluginValidationUI(issues, hasErrors, hasWarnings) {
+  const panel = document.getElementById('plugin-validation');
+  const summary = document.getElementById('plugin-validation-summary');
+  const details = document.getElementById('plugin-validation-details');
+
+  if (!panel || !summary || !details) return;
+
+  panel.classList.remove('plugin-ok', 'plugin-warn', 'plugin-error');
+
+  if (hasErrors) {
+    panel.classList.add('plugin-error');
+    summary.textContent = `Plugin validation: ${issues.length} issue(s) found`;
+  } else if (hasWarnings) {
+    panel.classList.add('plugin-warn');
+    summary.textContent = `Plugin validation: ${issues.length} warning(s)`;
+  } else {
+    panel.classList.add('plugin-ok');
+    summary.textContent = 'Plugin validation: OK';
+  }
+
+  details.innerHTML = '';
+  issues.forEach(issue => {
+    const line = document.createElement('div');
+    line.textContent = formatIssue(issue);
+    details.appendChild(line);
   });
 }
 

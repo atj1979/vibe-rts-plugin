@@ -170,6 +170,11 @@ export class UnitSystem {
    * @returns {Unit} The spawned unit
    */
   spawnUnit(type, x, z, team = 0) {
+    if (!this.unitsByType[type] || !this.instancedMeshes[type]) {
+      console.warn(`[UnitSystem] Cannot spawn unknown unit type: ${type}`);
+      return null;
+    }
+
     // Check if we have room
     const typeArray = this.unitsByType[type];
     const mesh = this.instancedMeshes[type];
