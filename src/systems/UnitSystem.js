@@ -117,7 +117,7 @@ export class UnitSystem {
       
       mesh.castShadow = true;
       mesh.receiveShadow = true;
-      mesh.frustumCulled = true; // Auto culling
+      mesh.frustumCulled = false; // Disable for instanced meshes - culling is per-instance and buggy
       
       // No instances yet
       mesh.count = 0;

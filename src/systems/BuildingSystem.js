@@ -99,6 +99,7 @@ export class BuildingSystem {
       const geometry = baseGeometry.clone();
       this.scaleGeometryForType(geometry, type);
       geometry.computeBoundingBox();
+      geometry.computeBoundingSphere();
       
       // Create instanced mesh
       const mesh = new THREE.InstancedMesh(
@@ -109,6 +110,7 @@ export class BuildingSystem {
       
       mesh.castShadow = true;
       mesh.receiveShadow = true;
+      mesh.frustumCulled = false; // CRITICAL: Disable frustum culling for instanced meshes
       mesh.count = 0;
       
       this.scene.add(mesh);
@@ -315,17 +317,23 @@ export class BuildingSystem {
         // Position
         this.tempPosition.copy(building.position);
         
-        // Adjust Y based on construction progress
-        if (building.state === BuildingState.CONSTRUCTING) {
-          // Rise from ground as constructed
-          const baseHeight = mesh.geometry.boundingBox ? 
-            (mesh.geometry.boundingBox.max.y - mesh.geometry.boundingBox.min.y) / 2 : 1;
-          this.tempPosition.y = baseHeight * building.constructionProgress;
-        } else {
-          const baseHeight = mesh.geometry.boundingBox ? 
-            (mesh.geometry.boundingBox.max.y - mesh.geometry.boundingBox.min.y) / 2 : 1;
-          this.tempPosition.y = baseHeight;
+        // Calculate Y offset based on building type height
+        let yOffset = 1.5; // Default
+        switch(building.type) {
+          case BuildingType.COMMAND_CENTER:
+            yOffset = 3 / 2; // height 3 -> center at 1.5
+            break;
+          case BuildingType.BARRACKS:
+            yOffset = 2 / 2; // height 2 -> center at 1.0
+            break;
+          case BuildingType.FACTORY:
+            yOffset = 2.5 / 2; // height 2.5 -> center at 1.25
+            break;
+          case BuildingType.SHIELD_GENERATOR:
+            yOffset = 4 / 2; // height 4 -> center at 2.0
+            break;
         }
+        this.tempPosition.y = yOffset;
         
         // Rotation
         this.tempRotation.setFromAxisAngle(
@@ -333,10 +341,8 @@ export class BuildingSystem {
           building.rotation
         );
         
-        // Scale (can animate during construction)
-        const scale = building.state === BuildingState.CONSTRUCTING ?
-          building.constructionProgress : 1.0;
-        this.tempScale.set(1, scale, 1);
+        // Scale - disable construction animation for now (always render at full scale)
+        this.tempScale.set(1, 1, 1);
         
         // Build matrix
         this.tempMatrix.compose(
