@@ -102,6 +102,27 @@ After extensive research on web-based VR performance:
 
 ---
 
+## 🔌 Plugin System (Units/Buildings)
+
+This game loads unit/building definitions from an external plugin repo so data can evolve without changing core gameplay code.
+
+**Plugin repo:** https://github.com/atj1979/vibe-rts-plugins
+
+### Required IDs
+
+The runtime expects these ids to exist in the active plugin group:
+
+- Units: `scout`, `soldier`, `tank`, `artillery`, `constructor`
+- Buildings: `command_center`, `barracks`, `factory`, `shield_generator`
+
+### Validation & Safety
+
+- Validation runs during `npm run build` via `npm run validate:plugins`.
+- At runtime, the UI shows a validation panel in the top-left info area.
+- Missing or malformed definitions never crash the game; issues are logged and shown in the UI.
+
+---
+
 ## 🚀 Quick Start
 
 ### Prerequisites

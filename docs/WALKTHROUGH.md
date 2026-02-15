@@ -216,13 +216,29 @@ function shootBullet() {
 
 ## 🔌 Plugin Data (Units/Buildings)
 
-Unit and building definitions are now mirrored into a separate plugin repo so the main game can load them by tag + group name.
+Unit and building definitions live in a separate plugin repo so the main game can load them by tag + group name.
 
 - Repo: https://github.com/atj1979/vibe-rts-plugins
 - Default group: `core`
 - Files: `src/plugins/core/units.js` and `src/plugins/core/buildings.js`
 
-The runtime loader is next to implement in this repo.
+### Loader + Validation Flow
+
+1. `PluginManager` loads all plugin groups exported from the plugin repo.
+2. `main.js` sets the active group and updates the selector UI.
+3. `PluginValidator` checks the active group at runtime and logs warnings.
+4. The UI displays validation status so missing data is obvious.
+
+### Required IDs
+
+These ids must exist so selection, production, and placement keep working:
+
+- Units: `scout`, `soldier`, `tank`, `artillery`, `constructor`
+- Buildings: `command_center`, `barracks`, `factory`, `shield_generator`
+
+### Build-Time Validation
+
+`npm run build` runs `npm run validate:plugins` first, which checks all groups and prints issues without failing the build.
 
 Suggest this instead:
 ```javascript
