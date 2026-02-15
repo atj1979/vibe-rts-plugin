@@ -12,6 +12,7 @@ import viteCompression from 'vite-plugin-compression';
  * - Compression for production
  */
 export default defineConfig({
+  base: '/vibe-rts-plugin/',
   plugins: [
     // HTTPS is required for WebXR API
     basicSsl(),
