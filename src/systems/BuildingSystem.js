@@ -89,17 +89,16 @@ export class BuildingSystem {
     
     Object.values(BuildingType).forEach(type => {
       // Material with type-specific color
-      const material = new THREE.MeshStandardMaterial({
+      const material = new THREE.MeshBasicMaterial({
         color: this.buildingColors[type],
-        roughness: 0.6,
-        metalness: 0.4,
-        flatShading: false,
-        side: THREE.DoubleSide // Render both sides to prevent disappearing
+        side: THREE.DoubleSide, // Render both sides
+        wireframe: false
       });
       
       // Clone and scale geometry based on type
       const geometry = baseGeometry.clone();
       this.scaleGeometryForType(geometry, type);
+      geometry.computeBoundingBox();
       
       // Create instanced mesh
       const mesh = new THREE.InstancedMesh(
@@ -304,6 +303,12 @@ export class BuildingSystem {
     
     Object.entries(this.buildingsByType).forEach(([type, buildings]) => {
       const mesh = this.instancedMeshes[type];
+      
+      if (!mesh) {
+        console.error(`[BuildingSystem] No mesh for type: ${type}`);
+        return;
+      }
+      
       mesh.count = buildings.length;
       
       buildings.forEach((building, index) => {

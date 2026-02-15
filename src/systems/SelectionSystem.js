@@ -32,10 +32,11 @@
 import * as THREE from 'three';
 
 export class SelectionSystem {
-  constructor(camera, renderer, unitSystem) {
+  constructor(camera, renderer, unitSystem, playerTeam = 0) {
     this.camera = camera;
     this.renderer = renderer;
     this.unitSystem = unitSystem;
+    this.playerTeam = playerTeam; // Only select units from this team
     
     // Selected units
     this.selectedUnits = [];
@@ -230,6 +231,12 @@ export class SelectionSystem {
    * @param {Unit} unit - The clicked unit
    */
   handleUnitClick(unit) {
+    // Only allow selecting units from the player's team
+    if (unit.team !== this.playerTeam) {
+      console.log('[SelectionSystem] Cannot select enemy unit');
+      return;
+    }
+    
     if (this.ctrlPressed) {
       // Ctrl+Click: Remove from selection
       this.deselectUnit(unit);
