@@ -46,8 +46,11 @@ export class SelectionSystem {
     
     // Selection box (for drag selection)
     this.isBoxSelecting = false;
+    this.isDragging = false;
     this.boxSelectStart = new THREE.Vector2();
     this.boxSelectEnd = new THREE.Vector2();
+    this.dragStartScreen = new THREE.Vector2();
+    this.dragThresholdPixels = 4;
     
     // Visual feedback
     this.selectionIndicators = [];
@@ -95,9 +98,12 @@ export class SelectionSystem {
     // Update mouse position
     this.updateMousePosition(event);
     
-    // Start box selection (if dragging)
-    this.isBoxSelecting = true;
+    // Track drag start in screen space
+    this.dragStartScreen.set(event.clientX, event.clientY);
+    this.isDragging = true;
+    this.isBoxSelecting = false;
     this.boxSelectStart.copy(this.mouse);
+    this.boxSelectEnd.copy(this.mouse);
     
     // Perform raycast for single unit selection
     this.performRaycast();
@@ -107,12 +113,22 @@ export class SelectionSystem {
    * Handle mouse move event
    */
   onMouseMove(event) {
-    if (!this.isBoxSelecting) return;
+    if (!this.isDragging) return;
     
-    this.updateMousePosition(event);
-    this.boxSelectEnd.copy(this.mouse);
+    const dx = event.clientX - this.dragStartScreen.x;
+    const dy = event.clientY - this.dragStartScreen.y;
+    const dragDistance = Math.hypot(dx, dy);
     
-    // TODO: Visualize box selection rectangle
+    if (!this.isBoxSelecting && dragDistance >= this.dragThresholdPixels) {
+      this.isBoxSelecting = true;
+    }
+    
+    if (this.isBoxSelecting) {
+      this.updateMousePosition(event);
+      this.boxSelectEnd.copy(this.mouse);
+      
+      // TODO: Visualize box selection rectangle
+    }
   }
   
   /**
@@ -120,6 +136,13 @@ export class SelectionSystem {
    */
   onMouseUp(event) {
     if (event.button !== 0) return;
+    
+    if (!this.isDragging) return;
+    this.isDragging = false;
+    
+    if (!this.isBoxSelecting) {
+      return;
+    }
     
     this.isBoxSelecting = false;
     
