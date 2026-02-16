@@ -87,7 +87,6 @@ export class Game {
     this.hands = [null, null]; // Left and right hand tracking
     this.handModels = [null, null]; // XRHandModel groups for rendering
     this.handJoints = [[], []]; // Store joint positions
-    this.showHandDebug = false; // Debug visualization flag
 
     console.log("[Game] Instance created");
   }
@@ -448,56 +447,10 @@ export class Game {
         event.preventDefault(); // Prevent default tab behavior
         this.cycleSelectedBuilding();
       }
-
-      // T key: Toggle hand tracking debug visualization (VR only)
-      if (event.key === "t" || event.key === "T") {
-        if (this.isVRMode) {
-          this.showHandDebug = !this.showHandDebug;
-          console.log(
-            `[Game] Hand tracking debug: ${this.showHandDebug ? "ON" : "OFF"}`,
-          );
-          if (this.showHandDebug) {
-            // Create debug visuals if not already present
-            for (let i = 0; i < 2; i++) {
-              if (this.hands[i]) {
-                this.createHandDebugVisuals(i, i === 0 ? "right" : "left");
-                // Hide 3D hand models when showing debug spheres
-                if (this.handModels[i]) {
-                  this.handModels[i].visible = false;
-                }
-              }
-            }
-          } else {
-            // Show 3D hand models when hiding debug spheres
-            for (let i = 0; i < 2; i++) {
-              if (this.handModels[i]) {
-                this.handModels[i].visible = true;
-              }
-              // Hide debug spheres
-              const handedness = i === 0 ? "right" : "left";
-              const keyJoints = [
-                "wrist",
-                "thumb-tip",
-                "index-finger-tip",
-                "middle-finger-tip",
-                "ring-finger-tip",
-                "pinky-finger-tip",
-              ];
-              keyJoints.forEach((jointName) => {
-                const sphereName = `hand-${handedness}-${jointName}`;
-                const sphere = this.scene.getObjectByName(sphereName);
-                if (sphere) {
-                  sphere.visible = false;
-                }
-              });
-            }
-          }
-        }
-      }
     });
 
     console.log(
-      "[Game] Keyboard shortcuts: H = health bars, B = building mode, Q/W/E = buildings, 1-5 = produce units, Tab = cycle buildings, T = hand tracking debug (VR)",
+      "[Game] Keyboard shortcuts: H = health bars, B = building mode, Q/W/E = buildings, 1-5 = produce units, Tab = cycle buildings",
     );
   }
 
@@ -1205,11 +1158,6 @@ export class Game {
           const frame = this.renderer.xr.getFrame();
           if (frame) {
             this.updateHandTracking(frame);
-
-            // Update debug visualization if enabled
-            if (this.showHandDebug) {
-              this.updateHandDebugVisuals();
-            }
           }
         }
       }
@@ -1367,15 +1315,24 @@ export class Game {
           this.handModels[handIndex] = handModelGroup;
 
           console.log(
-            `[Game] Hand tracking available for ${handedness} hand (index ${handIndex}) - 3D model created`,
+            `[Game] Hand tracking available for ${handedness} hand (index ${handIndex})`,
           );
-
-          // Create debug visualization spheres for key joints if debug mode is on
-          if (this.showHandDebug) {
-            this.createHandDebugVisuals(handIndex, handedness);
-            // Hide hand models when showing debug spheres
-            handModelGroup.visible = false;
-          }
+          console.log(
+            `[Game] XRHandModelFactory model created and added to scene for ${handedness} hand`,
+          );
+          
+          // Log hand model children to verify model loaded
+          setTimeout(() => {
+            if (handModel.children && handModel.children.length > 0) {
+              console.log(
+                `[Game] ✓ Hand model loaded successfully for ${handedness} hand (${handModel.children.length} child meshes)`,
+              );
+            } else {
+              console.warn(
+                `[Game] ⚠ Hand model empty for ${handedness} hand - may still be loading`,
+              );
+            }
+          }, 1000);
         }
       }
 
@@ -1489,67 +1446,6 @@ export class Game {
   }
 
   /**
-   * Create debug visualization for hand joints
-   */
-  createHandDebugVisuals(handIndex, handedness) {
-    // Create spheres at key joint locations for visualization
-    const keyJoints = [
-      "wrist",
-      "thumb-tip",
-      "index-finger-tip",
-      "middle-finger-tip",
-      "ring-finger-tip",
-      "pinky-finger-tip",
-    ];
-
-    const colors = [0xffff00, 0xff0000, 0x00ff00, 0x00ffff, 0xff00ff, 0xffffff];
-
-    keyJoints.forEach((jointName, idx) => {
-      const geometry = new THREE.SphereGeometry(0.01, 8, 8);
-      const material = new THREE.MeshBasicMaterial({
-        color: colors[idx],
-        fog: false,
-      });
-      const sphere = new THREE.Mesh(geometry, material);
-      sphere.userData.jointName = jointName;
-      sphere.userData.handIndex = handIndex;
-      sphere.name = `hand-${handedness}-${jointName}`;
-      this.scene.add(sphere);
-    });
-
-    console.log(
-      `[Game] Created debug visuals for ${handedness} hand (${keyJoints.length} joints)`,
-    );
-  }
-
-  /**
-   * Update hand debug visualization spheres to match joint positions
-   */
-  updateHandDebugVisuals() {
-    for (let handIndex = 0; handIndex < 2; handIndex++) {
-      const joints = this.handJoints[handIndex];
-      if (!joints || joints.length === 0) continue;
-
-      const handedness = handIndex === 0 ? "right" : "left";
-
-      // Update each debug sphere to match joint position
-      joints.forEach((joint) => {
-        const sphereName = `hand-${handedness}-${joint.name}`;
-        const sphere = this.scene.getObjectByName(sphereName);
-
-        if (sphere && joint.position) {
-          sphere.position.set(
-            joint.position.x,
-            joint.position.y,
-            joint.position.z,
-          );
-          sphere.visible = true;
-        }
-      });
-    }
-  }
-
-  /**
    * Setup VR controllers for Quest 3
    *
    * Shows actual Quest controller models with button/trigger/joystick visualization.
@@ -1576,35 +1472,32 @@ export class Game {
     for (let i = 0; i < 2; i++) {
       // Controller grip (hand position)
       const controllerGrip = this.renderer.xr.getControllerGrip(i);
-      const gripIndex = i === 0 ? "(RIGHT)" : "(LEFT)";
+      const handedness = i === 0 ? "right" : "left";
 
-      // Add visual indicator so we definitely see where the grips are
-      this.addControllerVisuals(
-        controllerGrip,
-        i === 0 ? 0xff0000 : 0x0000ff,
-        gripIndex,
-      );
-
-      // Try to load the actual controller model on top
+      // Load Quest controller model using XRControllerModelFactory
       try {
         const controllerModel =
           controllerModelFactory.createControllerModel(controllerGrip);
-        if (
-          controllerModel &&
-          controllerModel.children &&
-          controllerModel.children.length > 0
-        ) {
-          controllerGrip.add(controllerModel);
-          console.log(
-            `[Game] Loaded Quest controller model for hand ${i} ${gripIndex}`,
-          );
-        } else {
-          console.log(
-            `[Game] Controller factory model empty for hand ${i}, using visuals only`,
-          );
-        }
+        controllerGrip.add(controllerModel);
+        
+        console.log(
+          `[Game] XRControllerModelFactory model created for ${handedness} controller`,
+        );
+        
+        // Log controller model children to verify model loaded (delayed to allow async loading)
+        setTimeout(() => {
+          if (controllerModel.children && controllerModel.children.length > 0) {
+            console.log(
+              `[Game] ✓ Controller model loaded successfully for ${handedness} controller (${controllerModel.children.length} child meshes)`,
+            );
+          } else {
+            console.warn(
+              `[Game] ⚠ Controller model empty for ${handedness} controller - may still be loading or not available`,
+            );
+          }
+        }, 1000);
       } catch (e) {
-        console.warn(`[Game] Failed to load controller model ${i}:`, e.message);
+        console.error(`[Game] Failed to create controller model for ${handedness}:`, e.message);
       }
 
       this.scene.add(controllerGrip);
@@ -1640,43 +1533,11 @@ export class Game {
     this.setupHandTracking();
 
     console.log(
-      "[Game] VR controllers setup complete - visible indicators added",
+      "[Game] VR controllers setup complete with XRControllerModelFactory models",
     );
     console.log(
-      "[Game] NOTE: If hand tracking is active, controllers will not have pose data (mutually exclusive)",
+      "[Game] NOTE: Controllers and hand tracking are mutually exclusive in WebXR",
     );
-  }
-
-  /**
-   * Add guaranteed visible geometry to controller grip
-   * This ensures we can see the controller position even if factory models fail
-   */
-  addControllerVisuals(controllerGrip, color, label) {
-    // Main hand indicator - a sphere (use MeshStandardMaterial for emissive support)
-    const sphereGeometry = new THREE.SphereGeometry(0.04, 16, 16);
-    const sphereMaterial = new THREE.MeshStandardMaterial({
-      color,
-      emissive: color,
-      emissiveIntensity: 0.8,
-      fog: false,
-      metalness: 0.3,
-      roughness: 0.4,
-    });
-    const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-    controllerGrip.add(sphere);
-
-    // Pointer (cylinder pointing forward)
-    const cylinderGeometry = new THREE.CylinderGeometry(0.01, 0.01, 0.08, 8);
-    const cylinderMaterial = new THREE.MeshBasicMaterial({
-      color,
-      fog: false,
-    });
-    const cylinder = new THREE.Mesh(cylinderGeometry, cylinderMaterial);
-    cylinder.rotation.z = Math.PI / 2;
-    cylinder.position.z = -0.06;
-    controllerGrip.add(cylinder);
-
-    console.log(`[Game] Added visual indicators to controller ${label}`);
   }
 
   /**
@@ -1791,31 +1652,6 @@ export class Game {
       if (this.handModels[i]) {
         this.scene.remove(this.handModels[i]);
         this.handModels[i] = null;
-      }
-    }
-
-    // Remove hand debug visualization spheres
-    if (this.showHandDebug) {
-      for (let i = 0; i < 2; i++) {
-        const handedness = i === 0 ? "right" : "left";
-        const keyJoints = [
-          "wrist",
-          "thumb-tip",
-          "index-finger-tip",
-          "middle-finger-tip",
-          "ring-finger-tip",
-          "pinky-finger-tip",
-        ];
-
-        keyJoints.forEach((jointName) => {
-          const sphereName = `hand-${handedness}-${jointName}`;
-          const sphere = this.scene.getObjectByName(sphereName);
-          if (sphere) {
-            this.scene.remove(sphere);
-            sphere.geometry.dispose();
-            sphere.material.dispose();
-          }
-        });
       }
     }
 
