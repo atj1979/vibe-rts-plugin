@@ -21,6 +21,8 @@
 
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { XRControllerModelFactory } from "three/examples/jsm/webxr/XRControllerModelFactory.js";
+import { XRHandModelFactory } from "three/examples/jsm/webxr/XRHandModelFactory.js";
 import { createXRSession } from "../utils/WebXRUtils.js";
 import { UnitSystem } from "../systems/UnitSystem.js";
 import { SelectionSystem } from "../systems/SelectionSystem.js";
@@ -64,6 +66,9 @@ export class Game {
     this.maxFrameTime = 250; // Cap delta to prevent spiral of death
     this.accumulator = 0;
     this.lastTime = performance.now();
+    this.lastRenderTime = this.lastTime;
+    this.maxFPS = 120; // Cap rendering at 120 FPS
+    this.minFrameInterval = 1000 / this.maxFPS; // Minimum time between renders (8.33ms)
 
     // Initialize Three.js
     this.initRenderer();
@@ -74,7 +79,15 @@ export class Game {
     // VR Controllers (initialized when entering VR)
     this.controllers = [];
     this.xrSession = null;
+    this.xrReferenceSpace = null; // Reference space for tracking
     this.vrUISystem = null; // Initialized when entering VR
+    this.lastControllerLogTime = 0; // For logging controller positions every 3 seconds
+
+    // Hand tracking (XRHand API - Quest 3+)
+    this.hands = [null, null]; // Left and right hand tracking
+    this.handModels = [null, null]; // XRHandModel groups for rendering
+    this.handJoints = [[], []]; // Store joint positions
+    this.showHandDebug = false; // Debug visualization flag
 
     console.log("[Game] Instance created");
   }
@@ -222,9 +235,6 @@ export class Game {
   async initialize() {
     // Create ground plane
     this.createGroundPlane();
-
-    // Add demo cube to verify rendering
-    this.createDemoCube();
 
     // Initialize game systems
     this.unitSystem = new UnitSystem(this.scene, this.pluginManager);
@@ -396,9 +406,11 @@ export class Game {
         this.toggleBuildingMode();
       }
 
-      // ESC: Cancel building mode
+      // ESC: Cancel building mode or exit VR
       if (event.key === "Escape") {
-        if (this.buildingMode) {
+        if (this.isVRMode) {
+          this.exitVR();
+        } else if (this.buildingMode) {
           this.toggleBuildingMode();
         }
       }
@@ -436,10 +448,56 @@ export class Game {
         event.preventDefault(); // Prevent default tab behavior
         this.cycleSelectedBuilding();
       }
+
+      // T key: Toggle hand tracking debug visualization (VR only)
+      if (event.key === "t" || event.key === "T") {
+        if (this.isVRMode) {
+          this.showHandDebug = !this.showHandDebug;
+          console.log(
+            `[Game] Hand tracking debug: ${this.showHandDebug ? "ON" : "OFF"}`,
+          );
+          if (this.showHandDebug) {
+            // Create debug visuals if not already present
+            for (let i = 0; i < 2; i++) {
+              if (this.hands[i]) {
+                this.createHandDebugVisuals(i, i === 0 ? "right" : "left");
+                // Hide 3D hand models when showing debug spheres
+                if (this.handModels[i]) {
+                  this.handModels[i].visible = false;
+                }
+              }
+            }
+          } else {
+            // Show 3D hand models when hiding debug spheres
+            for (let i = 0; i < 2; i++) {
+              if (this.handModels[i]) {
+                this.handModels[i].visible = true;
+              }
+              // Hide debug spheres
+              const handedness = i === 0 ? "right" : "left";
+              const keyJoints = [
+                "wrist",
+                "thumb-tip",
+                "index-finger-tip",
+                "middle-finger-tip",
+                "ring-finger-tip",
+                "pinky-finger-tip",
+              ];
+              keyJoints.forEach((jointName) => {
+                const sphereName = `hand-${handedness}-${jointName}`;
+                const sphere = this.scene.getObjectByName(sphereName);
+                if (sphere) {
+                  sphere.visible = false;
+                }
+              });
+            }
+          }
+        }
+      }
     });
 
     console.log(
-      "[Game] Keyboard shortcuts: H = health bars, B = building mode, Q/W/E = buildings, 1-5 = produce units, Tab = cycle buildings",
+      "[Game] Keyboard shortcuts: H = health bars, B = building mode, Q/W/E = buildings, 1-5 = produce units, Tab = cycle buildings, T = hand tracking debug (VR)",
     );
   }
 
@@ -995,13 +1053,22 @@ export class Game {
     if (!this.isRunning || this.isPaused) return;
 
     try {
-      // Performance monitoring begin
-      this.performanceMonitor.begin();
-
       // Calculate delta time
       const currentTime = time || performance.now();
       let deltaTime = currentTime - this.lastTime;
       this.lastTime = currentTime;
+
+      // Frame rate limiting (120 FPS cap)
+      // Skip rendering if not enough time has passed since last render
+      const timeSinceLastRender = currentTime - this.lastRenderTime;
+      if (timeSinceLastRender < this.minFrameInterval) {
+        return; // Skip this frame, not enough time has passed
+      }
+      this.lastRenderTime = currentTime;
+
+      // Performance monitoring begin (ONLY for frames we actually render)
+      // Now measures wall-clock time between rendered frames, not execution time
+      this.performanceMonitor.begin();
 
       // Cap delta time to prevent spiral of death
       if (deltaTime > this.maxFrameTime) {
@@ -1015,7 +1082,7 @@ export class Game {
       this.accumulator += deltaTime;
 
       // Prevent accumulator from growing unbounded (safety check for VR stalls)
-      if (this.accumulator > this.maxFrameTime * 2) {
+      if (this.accumulator > this.fixedTimeStep * 3) {
         console.warn(
           `[Game] Accumulator overflow: ${this.accumulator.toFixed(1)}ms, resetting`,
         );
@@ -1024,16 +1091,17 @@ export class Game {
 
       // Fixed timestep updates (game logic)
       let updateCount = 0;
+      const maxUpdatesPerFrame = this.isVRMode ? 2 : 5;
       while (this.accumulator >= this.fixedTimeStep) {
         this.update(this.fixedTimeStep / 1000); // Convert to seconds
         this.accumulator -= this.fixedTimeStep;
 
         // Safety: prevent too many updates in one frame
         updateCount++;
-        if (updateCount > 5) {
+        if (updateCount > maxUpdatesPerFrame) {
           this.accumulator = 0;
           console.warn(
-            "[Game] Too many updates in one frame (>5), dropping frames to catch up",
+            `[Game] Skipping frames to catch up (VR=${this.isVRMode}, updates=${updateCount})`,
           );
           break;
         }
@@ -1045,7 +1113,23 @@ export class Game {
       // Render (happens at display refresh rate)
       this.render(alpha);
 
-      // Performance monitoring end
+      // Log controller positions every 3 seconds in VR
+      if (this.isVRMode && this.controllers && this.controllers.length >= 2) {
+        const now = currentTime;
+        if (now - this.lastControllerLogTime >= 3000) {
+          this.lastControllerLogTime = now;
+          const right = this.controllers[0];
+          const left = this.controllers[1];
+          console.log(
+            `[Controllers] RIGHT: (${right.position.x.toFixed(3)}, ${right.position.y.toFixed(3)}, ${right.position.z.toFixed(3)})`,
+          );
+          console.log(
+            `[Controllers] LEFT:  (${left.position.x.toFixed(3)}, ${left.position.y.toFixed(3)}, ${left.position.z.toFixed(3)})`,
+          );
+        }
+      }
+
+      // Performance monitoring end (ONLY for frames we actually render)
       this.performanceMonitor.end(this.renderer);
     } catch (error) {
       console.error("[Game] Game loop error:", error);
@@ -1058,12 +1142,6 @@ export class Game {
    * @param {number} dt - Delta time in seconds (always 1/60)
    */
   update(dt) {
-    // Demo: Rotate cube
-    if (this.demoCube) {
-      this.demoCube.rotation.y += dt * 0.5;
-      this.demoCube.rotation.x += dt * 0.3;
-    }
-
     // Update game systems
     if (this.unitSystem) {
       this.unitSystem.update(dt);
@@ -1105,10 +1183,37 @@ export class Game {
   /**
    * Render the scene
    *
+   * CRITICAL: ALWAYS call renderer.render(), even in VR mode.
+   * WebXRManager handles stereo splitting automatically when setSession is active.
+   * Failing to call renderer.render() results in "no visible output to baseLayer".
+   *
    * @param {number} alpha - Interpolation factor (0-1)
    */
   render(alpha) {
     try {
+      // Update controller and hand input in VR mode
+      if (this.isVRMode) {
+        this.updateControllerInput();
+
+        // Update hand tracking if available
+        // Note: We need to get the current XR frame from the render loop
+        // This requires accessing the frame from the renderer's XR session
+        if (
+          this.hands.some((h) => h !== null) &&
+          this.renderer.xr.isPresenting
+        ) {
+          const frame = this.renderer.xr.getFrame();
+          if (frame) {
+            this.updateHandTracking(frame);
+
+            // Update debug visualization if enabled
+            if (this.showHandDebug) {
+              this.updateHandDebugVisuals();
+            }
+          }
+        }
+      }
+
       // Update visual representations (instance matrices)
       if (this.unitSystem) {
         this.unitSystem.render();
@@ -1127,16 +1232,16 @@ export class Game {
         this.vrUISystem.update();
       }
 
-      // Update desktop camera controls
+      // Update desktop camera controls (VR uses WebXR for camera)
       if (!this.isVRMode && this.controls) {
         this.controls.update();
       }
 
-      // In VR mode, renderer.render is called automatically per eye by WebXRManager
-      // In desktop mode, we call it manually
-      if (!this.isVRMode) {
-        this.renderer.render(this.scene, this.camera);
-      }
+      // CRITICAL: Always render, regardless of mode
+      // WebXRManager automatically handles stereo splitting when XR session is active
+      // In desktop mode, renders normally to single framebuffer
+      // In VR mode, renders to both eye framebuffers
+      this.renderer.render(this.scene, this.camera);
     } catch (error) {
       console.error("[Game] Render error:", error);
     }
@@ -1168,6 +1273,10 @@ export class Game {
       // Request XR session
       this.xrSession = await createXRSession();
 
+      // Get the reference space (needed for hand tracking)
+      this.xrReferenceSpace =
+        await this.xrSession.requestReferenceSpace("local-floor");
+
       // Set up XR session
       await this.renderer.xr.setSession(this.xrSession);
 
@@ -1175,8 +1284,13 @@ export class Game {
       this.setupVRControllers();
 
       // Setup VR UI system (uses scene's camera which WebXR will update)
-      this.vrUISystem = new VRUISystem(this.scene, this.camera);
+      this.vrUISystem = new VRUISystem(this.scene, this.camera, this);
       this.vrUISystem.createDefaultPanels();
+
+      // Create debug console panel (head-locked to left hand)
+      // Pass left controller (index 1)
+      const leftController = this.controllers[1] || null;
+      this.vrUISystem.createConsolePanel(leftController);
 
       // Load custom UI panels from plugins
       if (this.pluginManager) {
@@ -1210,39 +1324,454 @@ export class Game {
   }
 
   /**
-   * Setup VR controllers
+   * Exit VR mode
+   */
+  exitVR() {
+    if (!this.isVRMode || !this.xrSession) {
+      return;
+    }
+
+    try {
+      console.log("[Game] Exiting VR mode...");
+      this.xrSession.end();
+    } catch (error) {
+      console.error("[Game] Failed to exit VR:", error);
+    }
+  }
+
+  /**
+   * Setup hand tracking using XRHand API (Quest 3+)
+   * Provides per-joint position and rotation data for both hands
+   * Creates realistic 3D hand models using XRHandModelFactory
+   */
+  setupHandTracking() {
+    try {
+      const handModelFactory = new XRHandModelFactory();
+
+      // Request hand tracking data from XR session
+      const inputSources = this.xrSession.inputSources;
+
+      for (const inputSource of inputSources) {
+        if (inputSource.hand) {
+          const handedness = inputSource.handedness; // 'left' or 'right'
+          const handIndex = handedness === "right" ? 0 : 1;
+
+          // Store the hand object for later tracking
+          this.hands[handIndex] = inputSource.hand;
+
+          // Create hand model using XRHandModelFactory
+          const handModelGroup = this.renderer.xr.getHand(handIndex);
+          const handModel = handModelFactory.createHandModel(handModelGroup);
+          handModelGroup.add(handModel);
+          this.scene.add(handModelGroup);
+          this.handModels[handIndex] = handModelGroup;
+
+          console.log(
+            `[Game] Hand tracking available for ${handedness} hand (index ${handIndex}) - 3D model created`,
+          );
+
+          // Create debug visualization spheres for key joints if debug mode is on
+          if (this.showHandDebug) {
+            this.createHandDebugVisuals(handIndex, handedness);
+            // Hide hand models when showing debug spheres
+            handModelGroup.visible = false;
+          }
+        }
+      }
+
+      console.log(
+        `[Game] Hand tracking setup complete (${this.hands.filter((h) => h).length} hands detected with 3D models)`,
+      );
+    } catch (error) {
+      console.warn("[Game] Hand tracking not available:", error.message);
+    }
+  }
+
+  /**
+   * Update hand tracking positions each frame
+   * @param {XRFrame} frame - Current XR frame
+   */
+  updateHandTracking(frame) {
+    if (!this.xrSession || !this.xrReferenceSpace) return;
+
+    try {
+      const inputSources = this.xrSession.inputSources;
+
+      for (const inputSource of inputSources) {
+        if (inputSource.hand) {
+          const handedness = inputSource.handedness;
+          const handIndex = handedness === "right" ? 0 : 1;
+          const hand = inputSource.hand;
+
+          // Update joint positions
+          this.handJoints[handIndex] = [];
+
+          // Get all joint names (23 joints per hand)
+          const jointNames = [
+            "wrist",
+            "thumb-metacarpal",
+            "thumb-phalanx-proximal",
+            "thumb-phalanx-distal",
+            "thumb-tip",
+            "index-finger-metacarpal",
+            "index-finger-phalanx-proximal",
+            "index-finger-phalanx-intermediate",
+            "index-finger-phalanx-distal",
+            "index-finger-tip",
+            "middle-finger-metacarpal",
+            "middle-finger-phalanx-proximal",
+            "middle-finger-phalanx-intermediate",
+            "middle-finger-phalanx-distal",
+            "middle-finger-tip",
+            "ring-finger-metacarpal",
+            "ring-finger-phalanx-proximal",
+            "ring-finger-phalanx-intermediate",
+            "ring-finger-phalanx-distal",
+            "ring-finger-tip",
+            "pinky-finger-metacarpal",
+            "pinky-finger-phalanx-proximal",
+            "pinky-finger-phalanx-intermediate",
+            "pinky-finger-phalanx-distal",
+            "pinky-finger-tip",
+          ];
+
+          let validJointCount = 0;
+
+          for (const jointName of jointNames) {
+            try {
+              const jointSpace = hand.get(jointName);
+
+              // Use the stored reference space from renderer setup
+              const pose = frame.getPose(jointSpace, this.xrReferenceSpace);
+
+              if (pose) {
+                const position = pose.transform.position;
+                const rotation = pose.transform.orientation;
+
+                this.handJoints[handIndex].push({
+                  name: jointName,
+                  position: { x: position.x, y: position.y, z: position.z },
+                  rotation: {
+                    x: rotation.x,
+                    y: rotation.y,
+                    z: rotation.z,
+                    w: rotation.w,
+                  },
+                });
+
+                validJointCount++;
+              }
+            } catch (e) {
+              // Joint not available or tracking lost
+            }
+          }
+
+          // Log hand position periodically
+          if (validJointCount > 0) {
+            const now = performance.now();
+            if (now - this.lastControllerLogTime >= 3000) {
+              this.lastControllerLogTime = now;
+              const wrist = this.handJoints[handIndex].find(
+                (j) => j.name === "wrist",
+              );
+              if (wrist) {
+                console.log(
+                  `[Hand ${handedness}] Wrist: (${wrist.position.x.toFixed(3)}, ${wrist.position.y.toFixed(3)}, ${wrist.position.z.toFixed(3)}) - ${validJointCount} joints tracked`,
+                );
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      // Hand tracking frame data might not be available
+    }
+  }
+
+  /**
+   * Create debug visualization for hand joints
+   */
+  createHandDebugVisuals(handIndex, handedness) {
+    // Create spheres at key joint locations for visualization
+    const keyJoints = [
+      "wrist",
+      "thumb-tip",
+      "index-finger-tip",
+      "middle-finger-tip",
+      "ring-finger-tip",
+      "pinky-finger-tip",
+    ];
+
+    const colors = [0xffff00, 0xff0000, 0x00ff00, 0x00ffff, 0xff00ff, 0xffffff];
+
+    keyJoints.forEach((jointName, idx) => {
+      const geometry = new THREE.SphereGeometry(0.01, 8, 8);
+      const material = new THREE.MeshBasicMaterial({
+        color: colors[idx],
+        fog: false,
+      });
+      const sphere = new THREE.Mesh(geometry, material);
+      sphere.userData.jointName = jointName;
+      sphere.userData.handIndex = handIndex;
+      sphere.name = `hand-${handedness}-${jointName}`;
+      this.scene.add(sphere);
+    });
+
+    console.log(
+      `[Game] Created debug visuals for ${handedness} hand (${keyJoints.length} joints)`,
+    );
+  }
+
+  /**
+   * Update hand debug visualization spheres to match joint positions
+   */
+  updateHandDebugVisuals() {
+    for (let handIndex = 0; handIndex < 2; handIndex++) {
+      const joints = this.handJoints[handIndex];
+      if (!joints || joints.length === 0) continue;
+
+      const handedness = handIndex === 0 ? "right" : "left";
+
+      // Update each debug sphere to match joint position
+      joints.forEach((joint) => {
+        const sphereName = `hand-${handedness}-${joint.name}`;
+        const sphere = this.scene.getObjectByName(sphereName);
+
+        if (sphere && joint.position) {
+          sphere.position.set(
+            joint.position.x,
+            joint.position.y,
+            joint.position.z,
+          );
+          sphere.visible = true;
+        }
+      });
+    }
+  }
+
+  /**
+   * Setup VR controllers for Quest 3
+   *
+   * Shows actual Quest controller models with button/trigger/joystick visualization.
+   * Uses both XR controller tracking AND gamepad input for complete state.
+   *
+   * NOTE: Controllers and hand tracking are mutually exclusive in WebXR.
+   * When using hand tracking, controller grips will not have pose data.
    */
   setupVRControllers() {
-    // Right controller
-    const controller1 = this.renderer.xr.getController(0);
-    this.scene.add(controller1);
-    this.controllers.push(controller1);
+    const controllerModelFactory = new XRControllerModelFactory();
 
-    // Left controller
-    const controller2 = this.renderer.xr.getController(1);
-    this.scene.add(controller2);
-    this.controllers.push(controller2);
-
-    // Add controller models (visual representation)
-    // Future: Use proper controller models
-    const controllerGeometry = new THREE.CylinderGeometry(0.01, 0.01, 0.5, 8);
-    const controllerMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
-
-    const controllerMesh1 = new THREE.Mesh(
-      controllerGeometry,
-      controllerMaterial,
+    // Log all input sources to understand what's available
+    console.log(
+      `[Game] XR Input Sources: ${this.xrSession.inputSources.length}`,
     );
-    controllerMesh1.rotation.x = -Math.PI / 2;
-    controller1.add(controllerMesh1);
+    this.xrSession.inputSources.forEach((source, idx) => {
+      console.log(
+        `[Game] Input Source ${idx}: handedness=${source.handedness}, ` +
+          `hasHand=${!!source.hand}, hasGamepad=${!!source.gamepad}, ` +
+          `targetRayMode=${source.targetRayMode}`,
+      );
+    });
 
-    const controllerMesh2 = new THREE.Mesh(
-      controllerGeometry,
-      controllerMaterial,
+    for (let i = 0; i < 2; i++) {
+      // Controller grip (hand position)
+      const controllerGrip = this.renderer.xr.getControllerGrip(i);
+      const gripIndex = i === 0 ? "(RIGHT)" : "(LEFT)";
+
+      // Add visual indicator so we definitely see where the grips are
+      this.addControllerVisuals(
+        controllerGrip,
+        i === 0 ? 0xff0000 : 0x0000ff,
+        gripIndex,
+      );
+
+      // Try to load the actual controller model on top
+      try {
+        const controllerModel =
+          controllerModelFactory.createControllerModel(controllerGrip);
+        if (
+          controllerModel &&
+          controllerModel.children &&
+          controllerModel.children.length > 0
+        ) {
+          controllerGrip.add(controllerModel);
+          console.log(
+            `[Game] Loaded Quest controller model for hand ${i} ${gripIndex}`,
+          );
+        } else {
+          console.log(
+            `[Game] Controller factory model empty for hand ${i}, using visuals only`,
+          );
+        }
+      } catch (e) {
+        console.warn(`[Game] Failed to load controller model ${i}:`, e.message);
+      }
+
+      this.scene.add(controllerGrip);
+
+      // Controller ray (pointing direction)
+      const controller = this.renderer.xr.getController(i);
+      const rayColor = i === 0 ? 0xff0000 : 0x0000ff; // Red=right, Blue=left
+      controller.add(this.createPointerRay(rayColor));
+
+      // Button listeners for visual feedback
+      controller.addEventListener("selectstart", () =>
+        this.onControllerButton(i, "selectstart"),
+      );
+      controller.addEventListener("selectend", () =>
+        this.onControllerButton(i, "selectend"),
+      );
+      controller.addEventListener("squeezestart", () =>
+        this.onControllerButton(i, "squeezestart"),
+      );
+      controller.addEventListener("squeezeend", () =>
+        this.onControllerButton(i, "squeezeend"),
+      );
+
+      this.scene.add(controller);
+    }
+
+    this.controllers = [
+      this.renderer.xr.getControllerGrip(0),
+      this.renderer.xr.getControllerGrip(1),
+    ];
+
+    // Try to setup hand tracking after controllers
+    this.setupHandTracking();
+
+    console.log(
+      "[Game] VR controllers setup complete - visible indicators added",
     );
-    controllerMesh2.rotation.x = -Math.PI / 2;
-    controller2.add(controllerMesh2);
+    console.log(
+      "[Game] NOTE: If hand tracking is active, controllers will not have pose data (mutually exclusive)",
+    );
+  }
 
-    console.log("[Game] VR controllers setup");
+  /**
+   * Add guaranteed visible geometry to controller grip
+   * This ensures we can see the controller position even if factory models fail
+   */
+  addControllerVisuals(controllerGrip, color, label) {
+    // Main hand indicator - a sphere (use MeshStandardMaterial for emissive support)
+    const sphereGeometry = new THREE.SphereGeometry(0.04, 16, 16);
+    const sphereMaterial = new THREE.MeshStandardMaterial({
+      color,
+      emissive: color,
+      emissiveIntensity: 0.8,
+      fog: false,
+      metalness: 0.3,
+      roughness: 0.4,
+    });
+    const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+    controllerGrip.add(sphere);
+
+    // Pointer (cylinder pointing forward)
+    const cylinderGeometry = new THREE.CylinderGeometry(0.01, 0.01, 0.08, 8);
+    const cylinderMaterial = new THREE.MeshBasicMaterial({
+      color,
+      fog: false,
+    });
+    const cylinder = new THREE.Mesh(cylinderGeometry, cylinderMaterial);
+    cylinder.rotation.z = Math.PI / 2;
+    cylinder.position.z = -0.06;
+    controllerGrip.add(cylinder);
+
+    console.log(`[Game] Added visual indicators to controller ${label}`);
+  }
+
+  /**
+   * Create a pointer ray for a controller
+   * @param {number} color - Ray color
+   * @returns {THREE.Line}
+   */
+  createPointerRay(color) {
+    const rayGeometry = new THREE.BufferGeometry();
+    const rayPositions = new Float32Array([0, 0, 0, 0, 0, -10]); // 10m forward
+    rayGeometry.setAttribute(
+      "position",
+      new THREE.BufferAttribute(rayPositions, 3),
+    );
+    const rayMaterial = new THREE.LineBasicMaterial({
+      color,
+      linewidth: 4,
+      fog: false,
+    });
+    const ray = new THREE.Line(rayGeometry, rayMaterial);
+    return ray;
+  }
+
+  /**
+   * Handle VR controller button press/release
+   * @param {number} controllerIndex - 0=right, 1=left
+   * @param {string} buttonType - 'selectstart', 'selectend', 'squeezestart', 'squeezeend'
+   */
+  onControllerButton(controllerIndex, buttonType) {
+    const controllerName = controllerIndex === 0 ? "RIGHT" : "LEFT";
+    console.log(
+      `[Game] Controller: ${controllerName} ${buttonType.toUpperCase()}`,
+    );
+
+    // Toggle console on right select press
+    if (
+      buttonType === "selectstart" &&
+      controllerIndex === 0 &&
+      this.vrUISystem
+    ) {
+      this.vrUISystem.toggleConsolePanel();
+    }
+  }
+
+  /**
+   * Update controller input states (gamepad button/axis positions)
+   * Reads actual input from gamepads to track triggers, sticks, buttons
+   */
+  updateControllerInput() {
+    if (!this.isVRMode) return;
+
+    const gamepads = navigator.getGamepads();
+
+    for (let i = 0; i < 2 && i < gamepads.length; i++) {
+      const gamepad = gamepads[i];
+      if (!gamepad) continue;
+
+      const controllerName = i === 0 ? "RIGHT" : "LEFT";
+
+      // Analog stick (axes 0, 1 = X, Y)
+      if (gamepad.axes.length >= 2) {
+        const stickX = gamepad.axes[0];
+        const stickY = gamepad.axes[1];
+        const magnitude = Math.sqrt(stickX * stickX + stickY * stickY);
+
+        if (magnitude > 0.15) {
+          // Movement detected
+          // TODO: Use this for camera panning/unit selection movement
+        }
+      }
+
+      // Trigger values (axes 4=right trigger, 5=left trigger on Quest)
+      if (gamepad.axes.length >= 5) {
+        const rightTrigger = gamepad.axes[4];
+        const leftTrigger = gamepad.axes[5];
+
+        // These map to grip/squeeze in addition to button events
+        if (rightTrigger > 0.75) {
+          // Right trigger deep press (could be alternate action)
+        }
+        if (leftTrigger > 0.75) {
+          // Left trigger deep press
+        }
+      }
+
+      // Button states
+      for (let j = 0; j < gamepad.buttons.length; j++) {
+        const button = gamepad.buttons[j];
+        // Available for other interactions
+        // Button 0 = trigger (primary action)
+        // Button 1 = grip (secondary action)
+        // Button 2, 3 = menu buttons
+        // Button 4, 5 = touchpad
+      }
+    }
   }
 
   /**
@@ -1251,6 +1780,44 @@ export class Game {
   onVRSessionEnd() {
     this.isVRMode = false;
     this.xrSession = null;
+    this.xrReferenceSpace = null;
+
+    // Cleanup hand tracking
+    this.hands = [null, null];
+    this.handJoints = [[], []];
+
+    // Remove hand models
+    for (let i = 0; i < 2; i++) {
+      if (this.handModels[i]) {
+        this.scene.remove(this.handModels[i]);
+        this.handModels[i] = null;
+      }
+    }
+
+    // Remove hand debug visualization spheres
+    if (this.showHandDebug) {
+      for (let i = 0; i < 2; i++) {
+        const handedness = i === 0 ? "right" : "left";
+        const keyJoints = [
+          "wrist",
+          "thumb-tip",
+          "index-finger-tip",
+          "middle-finger-tip",
+          "ring-finger-tip",
+          "pinky-finger-tip",
+        ];
+
+        keyJoints.forEach((jointName) => {
+          const sphereName = `hand-${handedness}-${jointName}`;
+          const sphere = this.scene.getObjectByName(sphereName);
+          if (sphere) {
+            this.scene.remove(sphere);
+            sphere.geometry.dispose();
+            sphere.material.dispose();
+          }
+        });
+      }
+    }
 
     // Cleanup VR UI system
     if (this.vrUISystem) {
